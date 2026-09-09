@@ -1,11 +1,10 @@
-// app/admin/AdminClient.tsx
 'use client';
 
 import { useState } from 'react';
 import { createUserAccount, deleteTeamMember, updateTeamMemberPassword } from '@/app/actions';
 import { User } from '@supabase/supabase-js';
 
-// MEKICS 대표 모델 및 제공 메뉴 (필요시 추가)
+// MEKICS 대표 모델 및 제공 메뉴
 const MEKICS_MODELS = ['HFT700', 'MTV1000', 'Pneuma', 'SU:M', 'OmniOx'];
 const PORTAL_MENUS = [
   { id: 'dashboard', label: '대시보드 조회' },
@@ -41,7 +40,7 @@ export default function AdminClient({ users }: { users: User[] }) {
         <>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
             <h2 className="text-lg font-semibold mb-4 text-blue-700">신규 본사 직원 등록</h2>
-            <form action={createUserAccount} className="flex flex-wrap gap-4 items-end">
+            <form action={async (formData: FormData) => { await createUserAccount(formData); }} className="flex flex-wrap items-end gap-4">
               <input type="hidden" name="accountType" value="internal" />
               
               <div className="w-40"><label className="block text-xs text-slate-600 mb-1">직원 성명</label><input name="name" type="text" required placeholder="예: 홍길동" className="w-full border p-2 text-sm rounded outline-none focus:border-blue-500"/></div>
@@ -72,9 +71,25 @@ export default function AdminClient({ users }: { users: User[] }) {
                       {(u.user_metadata as any)?.role === 'super_admin' ? <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-bold">최고 관리자</span> : <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs">일반 직원</span>}
                     </td>
                     <td className="p-3">
-                      <form action={updateTeamMemberPassword} className="flex gap-2"><input type="hidden" name="userId" value={u.id}/><input name="newPassword" type="text" required className="border p-1 text-xs w-28 rounded"/><button type="submit" className="text-blue-600 border border-blue-200 px-2 rounded text-xs">변경</button></form>
+                      <form action={async (formData: FormData) => {
+                        const userId = formData.get('userId') as string;
+                        const newPassword = formData.get('newPassword') as string;
+                        await updateTeamMemberPassword(userId, newPassword);
+                      }} className="flex gap-1">
+                        <input type="hidden" name="userId" value={u.id} />
+                        <input name="newPassword" type="password" placeholder="새 비밀번호" required className="border p-1 w-28 text-xs rounded" />
+                        <button type="submit" className="text-blue-600 border border-blue-200 px-2 rounded text-xs hover:bg-blue-50">변경</button>
+                      </form>
                     </td>
-                    <td className="p-3 text-center"><form action={deleteTeamMember}><input type="hidden" name="userId" value={u.id}/><button type="submit" className="text-red-500 hover:text-red-700 text-xs">삭제</button></form></td>
+                    <td className="p-3 text-center">
+                      <form action={async (formData: FormData) => {
+                        const userId = formData.get('userId') as string;
+                        await deleteTeamMember(userId);
+                      }}>
+                        <input type="hidden" name="userId" value={u.id} />
+                        <button type="submit" className="text-red-500 hover:underline text-xs">삭제</button>
+                      </form>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -88,7 +103,7 @@ export default function AdminClient({ users }: { users: User[] }) {
         <>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
             <h2 className="text-lg font-semibold mb-4 text-purple-700">신규 대리점 계정 및 권한 설정</h2>
-            <form action={createUserAccount} className="space-y-5">
+            <form action={async (formData: FormData) => { await createUserAccount(formData); }} className="space-y-5">
               <input type="hidden" name="accountType" value="partner" />
               
               <div className="flex gap-4">
@@ -139,8 +154,26 @@ export default function AdminClient({ users }: { users: User[] }) {
                       <td className="p-3 text-xs">{meta?.partner_type === 'exclusive' ? '🟣 독점' : meta?.partner_type === 'authorized' ? '🔵 비독점' : '⚪ 일반'}</td>
                       <td className="p-3 text-xs text-slate-500 max-w-[150px] truncate" title={meta?.allowed_models?.join(', ')}>{meta?.allowed_models?.length ? meta.allowed_models.join(', ') : '전체 제한됨'}</td>
                       <td className="p-3 text-xs text-slate-500 max-w-[150px] truncate" title={meta?.allowed_menus?.join(', ')}>{meta?.allowed_menus?.length ? `${meta.allowed_menus.length}개 메뉴 허용` : '전체 제한됨'}</td>
-                      <td className="p-3"><form action={updateTeamMemberPassword} className="flex gap-1"><input type="hidden" name="userId" value={u.id}/><input name="newPassword" type="text" className="border p-1 w-20 text-xs rounded"/><button type="submit" className="text-purple-600 border border-purple-200 px-2 rounded text-xs">변경</button></form></td>
-                      <td className="p-3 text-center"><form action={deleteTeamMember}><input type="hidden" name="userId" value={u.id}/><button type="submit" className="text-red-500 text-xs">삭제</button></form></td>
+                      <td className="p-3">
+                        <form action={async (formData: FormData) => {
+                          const userId = formData.get('userId') as string;
+                          const newPassword = formData.get('newPassword') as string;
+                          await updateTeamMemberPassword(userId, newPassword);
+                        }} className="flex gap-1">
+                          <input type="hidden" name="userId" value={u.id}/>
+                          <input name="newPassword" type="password" className="border p-1 w-20 text-xs rounded"/>
+                          <button type="submit" className="text-purple-600 border border-purple-200 px-2 rounded text-xs">변경</button>
+                        </form>
+                      </td>
+                      <td className="p-3 text-center">
+                        <form action={async (formData: FormData) => {
+                          const userId = formData.get('userId') as string;
+                          await deleteTeamMember(userId);
+                        }}>
+                          <input type="hidden" name="userId" value={u.id}/>
+                          <button type="submit" className="text-red-500 text-xs">삭제</button>
+                        </form>
+                      </td>
                     </tr>
                   )
                 })}
