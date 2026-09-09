@@ -5,12 +5,9 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true, // 이미지 최적화 에러 방지
   },
-  basePath: '/MEKICS-Service-Portal', // GitHub Pages 경로
-  eslint: {
-    ignoreDuringBuilds: true, // 빌드 시 ESLint 에러 무시
-  },
+  basePath: '/MEKICS-Service-Portal', // GitHub Pages 경로 설정
   typescript: {
-    ignoreBuildErrors: true, // 빌드 시 타입 에러 무시
+    ignoreBuildErrors: true, // 빌드 시 타입 에러 방지
   },
 };
 
