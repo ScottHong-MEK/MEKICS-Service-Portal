@@ -4,10 +4,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy-key';
+
+const supabaseAdmin = createClient(supabaseUrl, supabaseKey);  
 
 export async function getUserList() {
   const { data, error } = await supabaseAdmin.auth.admin.listUsers();
