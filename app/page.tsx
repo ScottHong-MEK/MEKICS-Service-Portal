@@ -6,13 +6,13 @@ import * as XLSX from 'xlsx'
 
 // 1. MSM 고장 원인 중분류 및 대표 처리 구분 매핑
 const CAUSE_CLASSIFICATIONS = [
-  { code: 'X', label: '미분류' },
+  { code: 'A', label: '기타' },
   { code: 'B', label: '사용자부주의' },
   { code: 'F', label: '원자재불량' },
   { code: 'D', label: '악세서리불량' },
   { code: 'C', label: '성능불만족' },
   { code: 'E', label: '증상재현안됨' },
-  { code: 'A', label: '기타' },
+  { code: 'X', label: '미분류' },
 ]
 
 const ACTION_CLASSIFICATIONS = [
