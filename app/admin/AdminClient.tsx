@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createUserAccount, deleteTeamMember, updateTeamMemberPassword } from '@/app/actions';
 import { User } from '@supabase/supabase-js';
+import Link from 'next/link';
 
 // MEKICS 대표 모델 및 제공 메뉴
 const MEKICS_MODELS = ['HFT700', 'MTV1000', 'Pneuma', 'SU:M', 'OmniOx'];
@@ -26,8 +27,8 @@ export default function AdminClient({ users }: { users: User[] }) {
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight">계정 및 권한 관리</h1>
           <p className="text-sm text-slate-500 mt-1">본사 관리자 권한 부여 및 대리점별 모델/메뉴 접근 권한을 제어합니다.</p>
         </div>
-        <a href="/" className="text-blue-600 hover:underline text-sm font-medium">← 메인 포털로 돌아가기</a>
-      </div>
+        <Link href="/" className="text-blue-600 hover:underline text-sm font-medium">← 메인 포털로 돌아가기</Link>
+L     </div>
 
       {/* 탭 버튼 */}
       <div className="flex border-b border-slate-200 mb-8">
