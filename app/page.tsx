@@ -564,7 +564,7 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6">
           <div className="text-center space-y-3">
             <div className="bg-white px-5 py-3.5 rounded-2xl inline-block shadow-md">
-              <img src="/logo.png" alt="MEKICS Logo" className="h-10 w-auto mx-auto object-contain" />
+              <img src="/MEKICS-Service-Portal/logo.png" alt="MEK Logo" className="h-8 w-auto object-contain" />
             </div>
             <p className="text-base font-bold text-slate-200">Global Service Portal Admin</p>
             <p className="text-xs text-slate-400">포털 접속을 위해 관리자 계정으로 로그인하세요.</p>
@@ -625,7 +625,7 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
       <aside className="w-64 bg-[#0B1727] text-white fixed h-screen top-0 left-0 flex flex-col shadow-2xl z-50 print:hidden">
         <div className="p-6 pb-6">
           <div className="bg-white px-4 py-2.5 rounded-xl inline-block shadow-md mb-2">
-            <img src="/logo.png" alt="MEKICS Logo" className="h-7 w-auto object-contain" />
+            <img src="/MEKICS-Service-Portal/logo.png" alt="MEKICS Logo" className="h-7 w-auto object-contain" />
           </div>
           <p className="text-xs font-bold text-slate-300">Global Service Portal</p>
           
@@ -1140,7 +1140,7 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
             <div className="p-8 border-2 border-slate-900 rounded-none bg-white text-slate-900 font-sans print:p-0 print:border-none">
               <div className="flex justify-between items-center border-b-2 border-slate-900 pb-4 mb-6">
                 <div>
-                  <img src="/logo.png" alt="MEK Logo" className="h-8 w-auto mb-1 object-contain" />
+<img src="/MEKICS-Service-Portal/logo.png" alt="MEK Logo" className="h-8 w-auto mb-1 object-contain" />
                   <p className="text-[10px] font-bold tracking-wider uppercase text-slate-600">Intensive Care System</p>
                 </div>
                 <h2 className="text-2xl font-black tracking-wider text-slate-900">Service Report</h2>

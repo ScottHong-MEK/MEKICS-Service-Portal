@@ -1,4 +1,3 @@
-// app/admin/page.tsx
 import { getUserList } from '@/app/actions';
 import AdminClient from './AdminClient';
 
