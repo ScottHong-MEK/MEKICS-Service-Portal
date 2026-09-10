@@ -1,188 +1,237 @@
 'use client';
 
 import { useState } from 'react';
-import { createUserAccount, deleteTeamMember, updateTeamMemberPassword } from '@/app/actions';
+import { supabase } from '@/app/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import Link from 'next/link';
 
-// MEKICS 대표 모델 및 제공 메뉴
-const MEKICS_MODELS = ['HFT700', 'MTV1000', 'Pneuma', 'SU:M', 'OmniOx'];
-const PORTAL_MENUS = [
-  { id: 'dashboard', label: '대시보드 조회' },
-  { id: 'service', label: '서비스/A/S 접수' },
-  { id: 'parts', label: '부품 단가 조회 및 주문' },
-  { id: 'manuals', label: '기술 매뉴얼 다운로드' }
-];
-
 export default function AdminClient({ users }: { users: User[] }) {
+  const [userList, setUserList] = useState<User[]>(users || []);
   const [activeTab, setActiveTab] = useState<'internal' | 'partner'>('internal');
 
-  const internalUsers = users.filter(u => u.user_metadata?.account_type !== 'partner');
-  const partnerUsers = users.filter(u => u.user_metadata?.account_type === 'partner');
+  // 본인 정보 변경 폼
+  const [myFullName, setMyFullName] = useState('');
+  const [myNewPassword, setMyPassword] = useState('');
+  const [myUpdateMsg, setMyUpdateMsg] = useState('');
+
+  // 신규 팀원 추가 폼
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newAccountType, setNewAccountType] = useState<'internal' | 'partner'>('internal');
+  const [createMsg, setCreateMsg] = useState('');
+
+  // 1. [본인] 이름 및 비밀번호 변경 함수
+  const handleUpdateMyProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMyUpdateMsg('처리 중...');
+
+    const updateData: any = {};
+    if (myFullName.trim()) {
+      updateData.data = { full_name: myFullName.trim() };
+    }
+    if (myNewPassword.trim()) {
+      updateData.password = myNewPassword.trim();
+    }
+
+    if (!updateData.data && !updateData.password) {
+      setMyUpdateMsg('❌ 변경할 이름이나 비밀번호를 입력해 주세요.');
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser(updateData);
+
+    if (error) {
+      setMyUpdateMsg(`❌ 수정 실패: ${error.message}`);
+    } else {
+      setMyUpdateMsg('✨ 내 정보가 성공적으로 변경되었습니다!');
+      setMyFullName('');
+      setMyPassword('');
+    }
+  };
+
+  // 2. [팀원] 신규 계정 생성 안내 및 등록
+  const handleCreateTeamMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateMsg('계정 생성 중...');
+
+    // Supabase Auth 신규 가입
+    const { data, error } = await supabase.auth.signUp({
+      email: newEmail.trim(),
+      password: newPassword.trim(),
+      options: {
+        data: {
+          full_name: newName.trim(),
+          account_type: newAccountType,
+        },
+      },
+    });
+
+    if (error) {
+      setCreateMsg(`❌ 계정 생성 실패: ${error.message}`);
+    } else {
+      setCreateMsg('✨ 계정이 생성되었습니다! (팀원이 이메일 확인 후 로그인 가능합니다)');
+      setNewEmail('');
+      setNewPassword('');
+      setNewName('');
+    }
+  };
+
+  const internalUsers = userList.filter(u => u.user_metadata?.account_type !== 'partner');
+  const partnerUsers = userList.filter(u => u.user_metadata?.account_type === 'partner');
 
   return (
-    <div className="p-8 max-w-7xl mx-auto bg-gray-50 min-h-screen font-sans">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-800 tracking-tight">계정 및 권한 관리</h1>
-          <p className="text-sm text-slate-500 mt-1">본사 관리자 권한 부여 및 대리점별 모델/메뉴 접근 권한을 제어합니다.</p>
+    <div className="min-h-screen bg-slate-900 text-white p-8">
+      <div className="max-w-5xl mx-auto space-y-8">
+        
+        {/* 상단 헤더 */}
+        <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+          <div>
+            <h1 className="text-2xl font-black text-white">⚙️ MEKICS 포털 관리자 설정</h1>
+            <p className="text-xs text-slate-400 mt-1">계정 관리, 권한 설정 및 내 프로필 수정</p>
+          </div>
+          <Link href="/" className="text-blue-400 hover:underline text-sm font-bold">
+            ← 메인 포털로 돌아가기
+          </Link>
         </div>
-        <Link href="/" className="text-blue-600 hover:underline text-sm font-medium">← 메인 포털로 돌아가기</Link>
-L     </div>
 
-      {/* 탭 버튼 */}
-      <div className="flex border-b border-slate-200 mb-8">
-        <button onClick={() => setActiveTab('internal')} className={`py-3 px-6 font-semibold text-sm border-b-2 ${activeTab === 'internal' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>👨‍💼 본사 직원 관리 ({internalUsers.length})</button>
-        <button onClick={() => setActiveTab('partner')} className={`py-3 px-6 font-semibold text-sm border-b-2 ${activeTab === 'partner' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>🏢 대리점/파트너 관리 ({partnerUsers.length})</button>
-      </div>
+        {/* 👤 1. 내 정보 변경 (이름 & 비밀번호) */}
+        <section className="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-4">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            👤 내 계정 정보 수정 (이름 / 비밀번호)
+          </h2>
+          <form onSubmit={handleUpdateMyProfile} className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div>
+              <label className="block text-slate-300 mb-1 font-semibold">새 이름 (Display Name)</label>
+              <input 
+                type="text" 
+                placeholder="예: 홍길동"
+                value={myFullName}
+                onChange={e => setMyFullName(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-300 mb-1 font-semibold">새 비밀번호</label>
+              <input 
+                type="password" 
+                placeholder="••••••••"
+                value={myNewPassword}
+                onChange={e => setMyPassword(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none focus:border-blue-500"
+              />
+            </div>
+            <div className="flex items-end">
+              <button 
+                type="submit" 
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition shadow"
+              >
+                내 정보 변경 저장
+              </button>
+            </div>
+          </form>
+          {myUpdateMsg && (
+            <p className="text-xs font-bold text-blue-300 bg-slate-900/80 p-3 rounded-lg border border-slate-700">{myUpdateMsg}</p>
+          )}
+        </section>
 
-      {/* ==================== TAB 1: 본사 직원 관리 ==================== */}
-      {activeTab === 'internal' && (
-        <>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
-            <h2 className="text-lg font-semibold mb-4 text-blue-700">신규 본사 직원 등록</h2>
-            <form action={async (formData: FormData) => { await createUserAccount(formData); }} className="flex flex-wrap items-end gap-4">
-              <input type="hidden" name="accountType" value="internal" />
-              
-              <div className="w-40"><label className="block text-xs text-slate-600 mb-1">직원 성명</label><input name="name" type="text" required placeholder="예: 홍길동" className="w-full border p-2 text-sm rounded outline-none focus:border-blue-500"/></div>
-              <div className="w-60"><label className="block text-xs text-slate-600 mb-1">이메일 (ID)</label><input name="email" type="email" required placeholder="email@mekics.com" className="w-full border p-2 text-sm rounded outline-none focus:border-blue-500"/></div>
-              <div className="w-40"><label className="block text-xs text-slate-600 mb-1">초기 비밀번호</label><input name="password" type="text" required minLength={6} placeholder="6자 이상" className="w-full border p-2 text-sm rounded outline-none focus:border-blue-500"/></div>
-              
-              {/* 관리자 권한 부여 체크박스 */}
-              <div className="w-auto flex items-center mb-2 px-2">
-                <input type="checkbox" id="isSuperAdmin" name="isSuperAdmin" className="w-4 h-4 text-blue-600 rounded cursor-pointer" />
-                <label htmlFor="isSuperAdmin" className="ml-2 text-sm font-semibold text-slate-800 cursor-pointer">최고 관리자 권한 부여 (계정 생성/삭제 허용)</label>
-              </div>
+        {/* ➕ 2. 신규 팀원 계정 추가 */}
+        <section className="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-4">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            ➕ 신규 팀원/대리점 계정 생성
+          </h2>
+          <form onSubmit={handleCreateTeamMember} className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <label className="block text-slate-300 mb-1 font-semibold">이메일 주소</label>
+              <input 
+                type="email" 
+                required
+                placeholder="user@mek-ics.com"
+                value={newEmail}
+                onChange={e => setNewEmail(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-300 mb-1 font-semibold">초기 비밀번호</label>
+              <input 
+                type="password" 
+                required
+                placeholder="••••••••"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-300 mb-1 font-semibold">이름 (담당자명)</label>
+              <input 
+                type="text" 
+                required
+                placeholder="예: Scott Hong"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none focus:border-blue-500"
+              />
+            </div>
+            <div className="flex items-end">
+              <button 
+                type="submit" 
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition shadow"
+              >
+                계정 등록
+              </button>
+            </div>
+          </form>
+          {createMsg && (
+            <p className="text-xs font-bold text-emerald-300 bg-slate-900/80 p-3 rounded-lg border border-slate-700">{createMsg}</p>
+          )}
+        </section>
 
-              <button type="submit" className="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700 ml-auto">+ 직원 추가</button>
-            </form>
+        {/* 👥 3. 등록된 계정 목록 */}
+        <section className="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-4">
+          <div className="flex justify-between items-center border-b border-slate-700 pb-3">
+            <h2 className="text-lg font-bold text-white">👥 등록된 사용자 계정 목록</h2>
+            <div className="text-xs bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400">
+              💡 팀원 타인 비밀번호 재설정은 보안상 <strong className="text-blue-400">Supabase Dashboard</strong>에서 가능합니다.
+            </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700">
-                <tr><th className="p-3">성명</th><th className="p-3">이메일</th><th className="p-3 text-center">권한 등급</th><th className="p-3">비밀번호 강제 변경</th><th className="p-3 text-center">삭제</th></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {internalUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50">
-                    <td className="p-3 font-medium">{(u.user_metadata as any)?.display_name || '이름 미상'}</td>
-                    <td className="p-3 text-slate-600 font-mono">{u.email}</td>
-                    <td className="p-3 text-center">
-                      {(u.user_metadata as any)?.role === 'super_admin' ? <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-bold">최고 관리자</span> : <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs">일반 직원</span>}
-                    </td>
-                    <td className="p-3">
-                      <form action={async (formData: FormData) => {
-                        const userId = formData.get('userId') as string;
-                        const newPassword = formData.get('newPassword') as string;
-                        await updateTeamMemberPassword(userId, newPassword);
-                      }} className="flex gap-1">
-                        <input type="hidden" name="userId" value={u.id} />
-                        <input name="newPassword" type="password" placeholder="새 비밀번호" required className="border p-1 w-28 text-xs rounded" />
-                        <button type="submit" className="text-blue-600 border border-blue-200 px-2 rounded text-xs hover:bg-blue-50">변경</button>
-                      </form>
-                    </td>
-                    <td className="p-3 text-center">
-                      <form action={async (formData: FormData) => {
-                        const userId = formData.get('userId') as string;
-                        await deleteTeamMember(userId);
-                      }}>
-                        <input type="hidden" name="userId" value={u.id} />
-                        <button type="submit" className="text-red-500 hover:underline text-xs">삭제</button>
-                      </form>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {/* ==================== TAB 2: 대리점 권한 관리 ==================== */}
-      {activeTab === 'partner' && (
-        <>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
-            <h2 className="text-lg font-semibold mb-4 text-purple-700">신규 대리점 계정 및 권한 설정</h2>
-            <form action={async (formData: FormData) => { await createUserAccount(formData); }} className="space-y-5">
-              <input type="hidden" name="accountType" value="partner" />
-              
-              <div className="flex gap-4">
-                <div className="w-1/4"><label className="block text-xs text-slate-600 mb-1">대리점명</label><input name="name" type="text" required className="w-full border p-2 text-sm rounded outline-none"/></div>
-                <div className="w-1/4"><label className="block text-xs text-slate-600 mb-1">등급 (단가결정)</label><select name="partnerType" className="w-full border p-2 text-sm rounded bg-white"><option value="exclusive">독점 (Exclusive)</option><option value="authorized">비독점 (Authorized)</option><option value="partner">일반 (Partner)</option></select></div>
-                <div className="w-1/4"><label className="block text-xs text-slate-600 mb-1">이메일</label><input name="email" type="email" required className="w-full border p-2 text-sm rounded outline-none"/></div>
-                <div className="w-1/4"><label className="block text-xs text-slate-600 mb-1">비밀번호</label><input name="password" type="text" required minLength={6} className="w-full border p-2 text-sm rounded outline-none"/></div>
-              </div>
-
-              {/* 접근 제어 박스 */}
-              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 grid grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-800 mb-2">🎯 취급 허용 모델 (체크)</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {MEKICS_MODELS.map(model => (
-                      <label key={model} className="flex items-center text-sm text-slate-600 cursor-pointer">
-                        <input type="checkbox" name="allowedModels" value={model} className="mr-2" defaultChecked /> {model}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-800 mb-2">🔒 포털 메뉴 접근 권한 (체크)</h3>
-                  <div className="flex flex-col gap-2">
-                    {PORTAL_MENUS.map(menu => (
-                      <label key={menu.id} className="flex items-center text-sm text-slate-600 cursor-pointer">
-                        <input type="checkbox" name="allowedMenus" value={menu.id} className="mr-2" defaultChecked /> {menu.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-end"><button type="submit" className="bg-purple-700 text-white px-6 py-2.5 rounded text-sm font-medium hover:bg-purple-800">+ 대리점 및 권한 등록</button></div>
-            </form>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700">
-                <tr><th className="p-3">대리점명</th><th className="p-3">등급</th><th className="p-3">허용 모델</th><th className="p-3">허용 메뉴</th><th className="p-3">비밀번호</th><th className="p-3 text-center">삭제</th></tr>
+              <thead className="bg-slate-900 text-slate-400 text-xs uppercase">
+                <tr>
+                  <th className="p-3">이메일</th>
+                  <th className="p-3">이름</th>
+                  <th className="p-3">가입일</th>
+                  <th className="p-3">상태</th>
+                </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {partnerUsers.map((u) => {
-                  const meta = u.user_metadata as any;
-                  return (
-                    <tr key={u.id} className="hover:bg-slate-50">
-                      <td className="p-3 font-medium">{meta?.display_name || '이름 미상'}</td>
-                      <td className="p-3 text-xs">{meta?.partner_type === 'exclusive' ? '🟣 독점' : meta?.partner_type === 'authorized' ? '🔵 비독점' : '⚪ 일반'}</td>
-                      <td className="p-3 text-xs text-slate-500 max-w-[150px] truncate" title={meta?.allowed_models?.join(', ')}>{meta?.allowed_models?.length ? meta.allowed_models.join(', ') : '전체 제한됨'}</td>
-                      <td className="p-3 text-xs text-slate-500 max-w-[150px] truncate" title={meta?.allowed_menus?.join(', ')}>{meta?.allowed_menus?.length ? `${meta.allowed_menus.length}개 메뉴 허용` : '전체 제한됨'}</td>
+              <tbody className="divide-y divide-slate-700">
+                {userList.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-4 text-center text-slate-500">등록된 유저 정보가 없습니다.</td>
+                  </tr>
+                ) : (
+                  userList.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-750">
+                      <td className="p-3 font-mono font-bold text-blue-300">{u.email}</td>
+                      <td className="p-3 font-semibold text-white">{u.user_metadata?.full_name || '-'}</td>
+                      <td className="p-3 text-slate-400 text-xs font-mono">{u.created_at?.slice(0, 10)}</td>
                       <td className="p-3">
-                        <form action={async (formData: FormData) => {
-                          const userId = formData.get('userId') as string;
-                          const newPassword = formData.get('newPassword') as string;
-                          await updateTeamMemberPassword(userId, newPassword);
-                        }} className="flex gap-1">
-                          <input type="hidden" name="userId" value={u.id}/>
-                          <input name="newPassword" type="password" className="border p-1 w-20 text-xs rounded"/>
-                          <button type="submit" className="text-purple-600 border border-purple-200 px-2 rounded text-xs">변경</button>
-                        </form>
-                      </td>
-                      <td className="p-3 text-center">
-                        <form action={async (formData: FormData) => {
-                          const userId = formData.get('userId') as string;
-                          await deleteTeamMember(userId);
-                        }}>
-                          <input type="hidden" name="userId" value={u.id}/>
-                          <button type="submit" className="text-red-500 text-xs">삭제</button>
-                        </form>
+                        <span className="bg-emerald-950 text-emerald-300 border border-emerald-800 text-xs px-2.5 py-0.5 rounded font-bold">
+                          Active
+                        </span>
                       </td>
                     </tr>
-                  )
-                })}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-        </>
-      )}
+        </section>
+
+      </div>
     </div>
   );
 }
