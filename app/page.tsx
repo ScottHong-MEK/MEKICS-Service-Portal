@@ -27,7 +27,34 @@ const ACTION_CLASSIFICATIONS = [
   { code: 'PC08', label: '소모품교체' },
 ]
 
-// 2. 주문코드(품목코드) 기준 매출 구분 매핑 테이블 
+// 2. 다운로드 센터 대상 제품군 및 카테고리 정의
+const DOWNLOAD_PRODUCTS = ['HFT700', 'HFT750', 'MV2000 EVO5', 'MTV1000', 'MV50']
+const SW_TYPES = ['Boot', 'Main', 'Pneumatic']
+const MANUAL_TYPES = ['유저 매뉴얼', '서비스 매뉴얼', '퀵 매뉴얼']
+
+// 초기 기본 다운로드 샘플 데이터
+const INITIAL_DOWNLOAD_FILES = [
+  // HFT700 SW
+  { id: 1, product: 'HFT700', category: 'sw', type: 'Boot', version: 'v1.01.00', file_name: 'HFT700_Boot_v1.01.00.zip', file_url: '#', release_date: '2026-01-15', description: 'HFT700 최신 안정화 Bootloader' },
+  { id: 2, product: 'HFT700', category: 'sw', type: 'Main', version: 'v1.05.00R21', file_name: 'HFT700_Main_v1.05.00R21.zip', file_url: '#', release_date: '2026-03-01', description: 'HFT700 Main Control Firmware' },
+  { id: 3, product: 'HFT700', category: 'sw', type: 'Pneumatic', version: 'v1.05.00R23', file_name: 'HFT700_Pneumatic_v1.05.00R23.zip', file_url: '#', release_date: '2026-03-05', description: 'HFT700 유공압 모듈 펌웨어' },
+  // HFT700 Manual
+  { id: 4, product: 'HFT700', category: 'manual', type: '유저 매뉴얼', version: 'Rev.02', file_name: 'HFT700_User_Manual_KOR_Rev02.pdf', file_url: '#', release_date: '2026-02-10', description: 'HFT700 국문 사용 설명서' },
+  { id: 5, product: 'HFT700', category: 'manual', type: '서비스 매뉴얼', version: 'Rev.01', file_name: 'HFT700_Service_Manual_ENG_Rev01.pdf', file_url: '#', release_date: '2026-02-12', description: 'HFT700 영문 정비 매뉴얼' },
+  { id: 6, product: 'HFT700', category: 'manual', type: '퀵 매뉴얼', version: 'Rev.01', file_name: 'HFT700_Quick_Guide_Rev01.pdf', file_url: '#', release_date: '2026-02-15', description: 'HFT700 빠른 설치 및 작동 가이드' },
+
+  // MV2000 EVO5 SW
+  { id: 7, product: 'MV2000 EVO5', category: 'sw', type: 'Boot', version: 'v2.00.01', file_name: 'MV2000_EVO5_Boot_v2.00.01.zip', file_url: '#', release_date: '2026-01-20', description: 'MV2000 EVO5 시스템 부트' },
+  { id: 8, product: 'MV2000 EVO5', category: 'sw', type: 'Main', version: 'v2.10.04R', file_name: 'MV2000_EVO5_Main_v2.10.04R.zip', file_url: '#', release_date: '2026-04-10', description: 'MV2000 EVO5 메인 SW' },
+  { id: 9, product: 'MV2000 EVO5', category: 'sw', type: 'Pneumatic', version: 'v2.08.02R', file_name: 'MV2000_EVO5_Pneu_v2.08.02R.zip', file_url: '#', release_date: '2026-04-12', description: 'MV2000 EVO5 공압 제어 SW' },
+  { id: 10, product: 'MV2000 EVO5', category: 'manual', type: '서비스 매뉴얼', version: 'Rev.03', file_name: 'MV2000_EVO5_Service_Manual_ISO.pdf', file_url: '#', release_date: '2026-03-20', description: 'MV2000 EVO5 ISO 공식 정비 서식' },
+
+  // MTV1000 SW & Manual
+  { id: 11, product: 'MTV1000', category: 'sw', type: 'Main', version: 'v1.08.00', file_name: 'MTV1000_Main_v1.08.00.zip', file_url: '#', release_date: '2026-02-28', description: 'MTV1000 이동형 인공호흡기 최신 SW' },
+  { id: 12, product: 'MTV1000', category: 'manual', type: '유저 매뉴얼', version: 'Rev.01', file_name: 'MTV1000_User_Manual_ENG.pdf', file_url: '#', release_date: '2026-01-10', description: 'MTV1000 User Manual (Global)' },
+]
+
+// 3. 주문코드 매핑
 const ORDER_CODE_MAP: Record<string, string> = {
   "MB0019_09": "상품", "MA0115_01": "서비스", "AR0110_00": "상품", "PG0305_00": "상품", "MA0420_00": "상품",
   "PG0330_02": "상품", "MA0335_04": "서비스", "MV0030_09": "제품", "AG0035_00": "OPTION", "PG0092_00": "서비스",
@@ -124,9 +151,10 @@ const getItemTypeByOrderCode = (orderCode: string, fallbackType: string) => {
 const getModelFromSN = (sn: string, originalModel?: string) => {
   const s = String(sn).toUpperCase()
   if (s.includes('MTV1K')) return 'MTV1000'
-  if (s.includes('MV2000')) return 'MV2000'
+  if (s.includes('MV2000')) return 'MV2000 EVO5'
   if (s.includes('MV50')) return 'MV50'
   if (s.includes('HFT700')) return 'HFT700'
+  if (s.includes('HFT750')) return 'HFT750'
   if (originalModel && originalModel !== 'nan' && !originalModel.includes('자동등록')) return originalModel
   return 'MEK-ICS Ventilator'
 }
@@ -140,7 +168,7 @@ export default function Dashboard() {
   const [loginError, setLoginError] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
 
-  const [activeTab, setActiveTab] = useState<'home' | 'production' | 'sales' | 'service' | 'warranty'>('home')
+  const [activeTab, setActiveTab] = useState<'home' | 'production' | 'sales' | 'service' | 'warranty' | 'downloads'>('home')
 
   const [equipments, setEquipments] = useState<any[]>([])
   const [allServiceCases, setAllServiceCases] = useState<any[]>([])
@@ -158,6 +186,23 @@ export default function Dashboard() {
   const [salesEndDate, setSalesEndDate] = useState('')
   const [salesMarketFilter, setSalesMarketFilter] = useState<'all' | '국내' | '해외'>('all')
   const [salesManagerFilter, setSalesManagerFilter] = useState('all')
+
+  // 📥 다운로드 센터 전용 상태 (하위 폴더 구분)
+  const [downloadSubTab, setDownloadSubTab] = useState<'sw' | 'manual'>('sw') // 'sw' (Software Download) | 'manual' (Manual Download)
+  const [downloadFiles, setDownloadFiles] = useState<any[]>(INITIAL_DOWNLOAD_FILES)
+  const [selectedDownloadProduct, setSelectedDownloadProduct] = useState<string>('all')
+  const [downloadSearch, setDownloadSearch] = useState('')
+  const [showUploadDownloadModal, setShowUploadDownloadModal] = useState(false)
+
+  // 신규 다운로드 파일 업로드 폼
+  const [downloadUploadForm, setDownloadUploadForm] = useState({
+    product: 'HFT700',
+    category: 'sw', // 'sw' | 'manual'
+    type: 'Main', // Boot, Main, Pneumatic / 유저 매뉴얼, 서비스 매뉴얼, 퀵 매뉴얼
+    version: 'v1.0.0',
+    description: '',
+  })
+  const [uploadingDownloadFile, setUploadingDownloadFile] = useState<File | null>(null)
 
   const [serialQuery, setSerialQuery] = useState('')
   const [searchResult, setSearchResult] = useState<any>(null)
@@ -226,9 +271,8 @@ export default function Dashboard() {
     )
   })
 
-  // --- 🔍 매출이력 다중 필터링 (날짜, 시장구분, 담당자, 검색어) ---
+  // --- 🔍 매출이력 다중 필터링 ---
   const filteredSalesRecords = salesRecords.filter((item: any) => {
-    // 1. 검색어 필터
     if (salesSearch.trim()) {
       const q = salesSearch.toLowerCase()
       const matches = (
@@ -240,26 +284,39 @@ export default function Dashboard() {
       if (!matches) return false
     }
 
-    // 2. 날짜 필터 (시작일, 종료일)
     if (salesStartDate && item.sales_date && item.sales_date < salesStartDate) return false
     if (salesEndDate && item.sales_date && item.sales_date > salesEndDate) return false
 
-    // 3. 시장 구분 필터 (국내 / 해외)
     if (salesMarketFilter !== 'all' && item.market_type !== salesMarketFilter) return false
-
-    // 4. 담당자 필터
     if (salesManagerFilter !== 'all' && (item.manager || '미지정') !== salesManagerFilter) return false
 
     return true
   })
 
-  // 매출 담당자 유니크 리스트
   const managerList = Array.from(new Set(salesRecords.map(s => s.manager || '미지정'))).filter(Boolean)
-
-  // 선택된 매출 합계 금액 집계
   const filteredSalesTotalAmount = filteredSalesRecords.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0)
 
-  // 📅 날짜 퀵 필터 설정 함수
+  // --- 📥 다운로드 센터 필터링 (폴더별 완전 분리) ---
+  const filteredDownloadFiles = downloadFiles.filter((file) => {
+    // 1. 하위 폴더 카테고리 일치 여부 (sw vs manual)
+    if (file.category !== downloadSubTab) return false
+
+    // 2. 제품 선택 필터
+    if (selectedDownloadProduct !== 'all' && file.product !== selectedDownloadProduct) return false
+
+    // 3. 키워드 검색
+    if (downloadSearch.trim()) {
+      const q = downloadSearch.toLowerCase()
+      return (
+        file.file_name.toLowerCase().includes(q) ||
+        file.type.toLowerCase().includes(q) ||
+        file.version.toLowerCase().includes(q) ||
+        file.description.toLowerCase().includes(q)
+      )
+    }
+    return true
+  })
+
   const applyDatePreset = (preset: 'month' | 'q1' | 'q2' | 'q3' | 'q4' | 'year' | 'all') => {
     const y = currentYear
     if (preset === 'month') {
@@ -324,7 +381,52 @@ export default function Dashboard() {
     const { data: salesData } = await supabase.from('sales_records').select('*').order('sales_date', { ascending: false })
     if (salesData) setSalesRecords(salesData)
 
+    const { data: downloadData } = await supabase.from('download_files').select('*').order('id', { ascending: false })
+    if (downloadData && downloadData.length > 0) setDownloadFiles(downloadData)
+
     setLoading(false)
+  }
+
+  const handleUploadDownloadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!uploadingDownloadFile) return alert('업로드할 파일을 선택해 주세요.')
+
+    setUploading(true)
+    const fileExt = uploadingDownloadFile.name.split('.').pop()
+    const fileName = `${downloadUploadForm.product}_${downloadUploadForm.type}_${Date.now()}.${fileExt}`
+    const filePath = `downloads/${fileName}`
+
+    const { error: storageError } = await supabase.storage.from('download-files').upload(filePath, uploadingDownloadFile)
+    
+    let publicUrl = '#'
+    if (!storageError) {
+      const { data: urlData } = supabase.storage.from('download-files').getPublicUrl(filePath)
+      if (urlData.publicUrl) publicUrl = urlData.publicUrl
+    }
+
+    const newEntry = {
+      product: downloadUploadForm.product,
+      category: downloadUploadForm.category,
+      type: downloadUploadForm.type,
+      version: downloadUploadForm.version,
+      file_name: uploadingDownloadFile.name,
+      file_url: publicUrl,
+      release_date: new Date().toISOString().slice(0, 10),
+      description: downloadUploadForm.description || `${downloadUploadForm.product} ${downloadUploadForm.type} 최신 자료`
+    }
+
+    const { data: dbData, error: dbError } = await supabase.from('download_files').insert([newEntry]).select()
+
+    if (!dbError && dbData) {
+      setDownloadFiles([dbData[0], ...downloadFiles])
+    } else {
+      setDownloadFiles([{ id: Date.now(), ...newEntry }, ...downloadFiles])
+    }
+
+    alert('다운로드 자료가 성공적으로 등록되었습니다.')
+    setShowUploadDownloadModal(false)
+    setUploadingDownloadFile(null)
+    setUploading(false)
   }
 
   const handleAutoFetchServiceInfo = async (sn: string) => {
@@ -615,7 +717,7 @@ export default function Dashboard() {
   const totalActual = reportData.filter(d => !d.isGroup).reduce((acc, curr) => acc + curr.actual, 0)
   const maxVal = Math.max(...reportData.map(d => Math.max(d.target, d.actual))) * 1.2
 
-  // --- 💡 서비스 파트 통계 및 탭 가공 (올해 데이터만 한정) ---
+  // --- 서비스 파트 통계 및 탭 가공 ---
   const serviceSales = salesRecords.filter(s => {
     const isService = s.item_type === '서비스'
     const isCurrentYear = s.sales_date ? s.sales_date.startsWith(currentYear) : true
@@ -627,7 +729,6 @@ export default function Dashboard() {
   serviceSales.forEach(s => { const name = s.item_name || '기타 부품'; partsMap[name] = (partsMap[name] || 0) + Number(s.amount) })
   const top10Parts = Object.entries(partsMap).sort((a,b) => b[1] - a[1]).slice(0, 10)
 
-  // 국내/해외 우수 대리점 구분 (올해 매출 기준)
   const domesticAgencyMap: Record<string, number> = {}
   const overseasAgencyMap: Record<string, number> = {}
 
@@ -645,7 +746,6 @@ export default function Dashboard() {
   const top10OverseasAgencies = Object.entries(overseasAgencyMap).sort((a,b) => b[1] - a[1]).slice(0, 10)
   const currentAgencies = agencyTab === 'domestic' ? top10DomesticAgencies : top10OverseasAgencies
 
-  // 국내/해외 주요 고장 증상 구분
   const domesticIssueMap: Record<string, { model: string; desc: string; cases: any[] }> = {}
   const overseasIssueMap: Record<string, { model: string; desc: string; cases: any[] }> = {}
 
@@ -706,7 +806,7 @@ export default function Dashboard() {
             <div className="bg-white px-5 py-3.5 rounded-2xl inline-block shadow-md">
               <img src="/MEKICS-Service-Portal/logo.png" alt="MEK Logo" className="h-8 w-auto object-contain" />
             </div>
-            <p className="text-base font-bold text-slate-200">Global Service Portal Admin</p>
+            <p className="text-lg font-black text-slate-100 tracking-wide">Global Service Portal Admin</p>
             <p className="text-xs text-slate-400">포털 접속을 위해 관리자 계정으로 로그인하세요.</p>
           </div>
 
@@ -753,9 +853,8 @@ export default function Dashboard() {
     )
   }
 
-  // 🖥️ 메인 포털 화면
   const pageTitles = { 
-    home: '📊 매출 현황', production: '🏭 생산이력조회', sales: '💰 매출이력조회', service: '🛠️ 서비스 현황', warranty: '🔍 워런티 및 라이프사이클 조회'
+    home: '📊 종합 통합 대시보드', production: '🏭 생산이력조회', sales: '💰 매출이력조회', service: '🛠️ 서비스 현황', warranty: '🔍 워런티 및 라이프사이클 조회', downloads: '📥 자료 및 SW 다운로드 센터'
   }
 
   return (
@@ -764,10 +863,22 @@ export default function Dashboard() {
       {/* 1. 좌측 사이드바 (LNB) */}
       <aside className="w-64 bg-[#0B1727] text-white fixed h-screen top-0 left-0 flex flex-col shadow-2xl z-50 print:hidden">
         <div className="p-6 pb-6">
-          <div className="bg-white px-4 py-2.5 rounded-xl inline-block shadow-md mb-2">
+          {/* MEKICS 로고 클릭 시 대시보드(Home)로 이동 */}
+          <div 
+            onClick={() => { setActiveTab('home'); setSearchResult(null); }}
+            className="bg-white px-4 py-2.5 rounded-xl inline-block shadow-md mb-3 cursor-pointer hover:opacity-90 transition"
+            title="메인 대시보드로 이동"
+          >
             <img src="/MEKICS-Service-Portal/logo.png" alt="MEKICS Logo" className="h-7 w-auto object-contain" />
           </div>
-          <p className="text-xs font-bold text-slate-300">Global Service Portal</p>
+          {/* 텍스트 크기 확대 및 메인 이동 링크 */}
+          <p 
+            onClick={() => { setActiveTab('home'); setSearchResult(null); }}
+            className="text-base font-black text-white tracking-wide cursor-pointer hover:text-blue-400 transition"
+            title="메인 대시보드로 이동"
+          >
+            Global Service Portal
+          </p>
           
           <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-3">
             <span className="bg-blue-600/30 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-500/30">
@@ -778,11 +889,12 @@ export default function Dashboard() {
         </div>
 
         <nav className="flex-1 px-4 space-y-2">
-          <button onClick={() => { setActiveTab('home'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'home' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>📊 매출 현황</button>
+          <button onClick={() => { setActiveTab('home'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'home' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>📊 종합 대시보드</button>
           <button onClick={() => { setActiveTab('production'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'production' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>🏭 생산이력조회</button>
           <button onClick={() => { setActiveTab('sales'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'sales' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>💰 매출이력조회</button>
           <button onClick={() => { setActiveTab('service'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'service' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>🛠️ 서비스 현황</button>
           <button onClick={() => { setActiveTab('warranty'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'warranty' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>🔍 워런티 조회</button>
+          <button onClick={() => { setActiveTab('downloads'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'downloads' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>📥 다운로드 센터</button>
         </nav>
 
         <div className="p-6 text-xs text-slate-500 font-medium"><p>© 2026 MEKICS.</p><p>All rights reserved.</p></div>
@@ -796,6 +908,265 @@ export default function Dashboard() {
 
         <main className="flex-1 p-8 space-y-8 print:p-0">
           
+          {/* 📊 통합 대시보드 (Home) - 매출 및 서비스 한눈에 보기 */}
+          {activeTab === 'home' && (
+            <div className="space-y-8 animate-fade-in">
+              
+              {/* 4대 주요 KPI 카드 요약 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">2026 누적 총 실적</p>
+                    <h3 className="text-2xl font-black text-blue-600">{totalActual.toFixed(2)} <span className="text-sm font-bold text-slate-600">억원</span></h3>
+                    <p className="text-[11px] font-semibold text-slate-400 mt-1">목표 달성률 {totalTarget ? Math.round((totalActual / totalTarget) * 100) : 0}%</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl font-bold">📊</div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">2026 서비스 파트 매출</p>
+                    <h3 className="text-2xl font-black text-emerald-600">₩{(totalServiceSalesAmt / 100000000).toFixed(2)} <span className="text-sm font-bold text-slate-600">억원</span></h3>
+                    <p className="text-[11px] font-semibold text-slate-400 mt-1">부품/유상 수리 합계</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl font-bold">💰</div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">총 A/S 접수 건수</p>
+                    <h3 className="text-2xl font-black text-rose-600">{allServiceCases.length} <span className="text-sm font-bold text-slate-600">건</span></h3>
+                    <p className="text-[11px] font-semibold text-slate-400 mt-1">완료 {allServiceCases.filter(c => c.status === 'Closed').length}건 / 진행중 {allServiceCases.filter(c => c.status !== 'Closed').length}건</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-2xl font-bold">🛠️</div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">등록 장비 (마스터 DB)</p>
+                    <h3 className="text-2xl font-black text-amber-600">{equipments.length} <span className="text-sm font-bold text-slate-600">대</span></h3>
+                    <p className="text-[11px] font-semibold text-slate-400 mt-1">글로벌 서비스 추적 등록</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl font-bold">🏭</div>
+                </div>
+              </div>
+
+              {/* 매출 현황 대시보드 차트 & 표 */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-200 pb-5 mb-6 gap-4">
+                  <h3 className="text-xl font-black text-slate-800">📊 2026년 부서별/지역별 매출 누적 실적 현황 <span className="text-sm font-bold text-slate-400 ml-2">(단위: 억원)</span></h3>
+                  <div className="flex items-center gap-5 text-sm font-bold bg-slate-50 px-4 py-2 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2"><span className="w-4 h-4 bg-blue-500 rounded shadow-sm"></span>목표</div>
+                    <div className="flex items-center gap-2"><span className="w-4 h-4 bg-rose-500 rounded shadow-sm"></span>실적</div>
+                  </div>
+                </div>
+                <div className="w-full bg-white rounded-xl mb-8 overflow-x-auto">
+                  <div className="h-[300px] flex items-end gap-3 md:gap-5 min-w-[800px] pb-8 relative">
+                    {reportData.map((d, idx) => {
+                      const tHeight = (d.target / maxVal) * 100; const aHeight = (d.actual / maxVal) * 100
+                      return (
+                        <div key={idx} className={`flex-1 flex flex-col items-center justify-end h-full ${d.isGroup ? 'bg-slate-50 rounded-xl border border-slate-100' : ''}`}>
+                          <div className="flex items-end gap-1.5 w-full justify-center h-full group">
+                            <div className="w-10 md:w-14 bg-blue-500 rounded-t-md relative flex flex-col justify-end shadow-md" style={{ height: `${tHeight}%` }}><span className="absolute -top-7 w-full text-center text-xs font-black text-blue-600">{d.target.toFixed(2)}</span></div>
+                            <div className="w-10 md:w-14 bg-rose-500 rounded-t-md relative flex flex-col justify-end shadow-md" style={{ height: `${aHeight}%` }}><span className="absolute -top-7 w-full text-center text-xs font-black text-rose-600">{d.actual.toFixed(2)}</span></div>
+                          </div>
+                          <span className="text-sm font-bold text-slate-700 mt-5 whitespace-nowrap">{d.label}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-sm">
+                  <table className="w-full text-center text-sm whitespace-nowrap">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-300">
+                        <th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>매출현황</th><th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>국내</th><th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>해외 대리점</th><th className="p-3 border-b border-r border-slate-300 font-bold text-slate-800" colSpan={3}>서비스</th><th className="p-3 border-b border-r border-slate-300 font-bold text-slate-800" colSpan={5}>전략 (지사/해외)</th><th className="p-4 font-bold text-slate-800" rowSpan={2}>총합계</th>
+                      </tr>
+                      <tr className="bg-slate-50 border-b border-slate-300 text-xs">
+                        <th className="p-3 border-r border-slate-200 text-slate-600 font-bold">국내서비스</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">해외서비스</th><th className="p-3 border-r border-slate-300 bg-slate-100 text-slate-800 font-bold">서비스합계</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">CKD</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">지사-인도</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">지사-터키</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">일본</th><th className="p-3 border-r border-slate-300 text-slate-600 font-bold">미국</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-medium text-slate-700">
+                      <tr className="border-b border-slate-200 bg-white"><td className="p-4 border-r border-slate-300 font-black text-slate-800">목표</td>{reportData.map((d, i) => <td key={i} className={`p-4 font-bold text-blue-700 ${d.isGroup ? 'bg-slate-50 border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{d.target.toFixed(2)}</td>)}<td className="p-4 font-black text-blue-800 bg-blue-50 text-base">{totalTarget.toFixed(2)}</td></tr>
+                      <tr className="border-b border-slate-200 bg-white"><td className="p-4 border-r border-slate-300 font-black text-slate-800">실적</td>{reportData.map((d, i) => <td key={i} className={`p-4 font-bold text-rose-600 ${d.isGroup ? 'bg-slate-50 border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{d.actual.toFixed(2)}</td>)}<td className="p-4 font-black text-rose-700 bg-rose-50 text-base">{totalActual.toFixed(2)}</td></tr>
+                      <tr className="bg-slate-50"><td className="p-4 border-r border-slate-300 font-black text-slate-800">달성%</td>{reportData.map((d, i) => { const pct = d.target ? Math.round((d.actual / d.target) * 100) : 0; return <td key={i} className={`p-4 font-black ${pct >= 100 ? 'text-blue-600' : 'text-slate-600'} ${d.isGroup ? 'border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{pct}%</td> })}<td className="p-4 font-black text-slate-800 bg-slate-200 text-base">{totalTarget ? Math.round((totalActual / totalTarget) * 100) : 0}%</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 메인 화면 하단 서비스 현황 요약 위젯 2종 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* 1. 우수 대리점 위젯 */}
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2">🏆 부품/서비스 구매 우수 대리점 TOP 10</h4>
+                    <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
+                      <button onClick={() => setAgencyTab('domestic')} className={`px-3 py-1 rounded-md transition ${agencyTab === 'domestic' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>국내</button>
+                      <button onClick={() => setAgencyTab('overseas')} className={`px-3 py-1 rounded-md transition ${agencyTab === 'overseas' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>해외</button>
+                    </div>
+                  </div>
+                  <div className="space-y-2.5">
+                    {currentAgencies.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p> : currentAgencies.slice(0, 5).map(([agency, amt], idx) => (
+                      <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
+                        <span onClick={() => { setAgencyModal({ name: agency, records: salesRecords.filter(s => s.customer_name === agency && (s.sales_date || '').startsWith(currentYear)) }) }} className="font-medium text-slate-700 truncate cursor-pointer hover:text-blue-600 hover:underline">
+                          <span className="text-slate-400 font-bold mr-2">{idx+1}</span>{agency}
+                        </span>
+                        <span className="font-mono font-bold text-emerald-600">₩{(amt/1000).toLocaleString(undefined, {maximumFractionDigits:0})}k</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. 주요 고장 증상 위젯 */}
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2">🚨 주요 고장 증상 TOP 5</h4>
+                    <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
+                      <button onClick={() => setIssueTab('domestic')} className={`px-3 py-1 rounded-md transition ${issueTab === 'domestic' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>국내</button>
+                      <button onClick={() => setIssueTab('overseas')} className={`px-3 py-1 rounded-md transition ${issueTab === 'overseas' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>해외</button>
+                    </div>
+                  </div>
+                  <div className="space-y-2.5">
+                    {currentIssues.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p> : currentIssues.map((issue, idx) => (
+                      <div key={idx} className="flex justify-between items-center text-sm bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div className="pr-2 truncate">
+                          <span className="block text-xs font-black text-rose-500 mb-0.5">{issue.model}</span>
+                          <span className="font-medium text-slate-700 truncate block text-xs">{issue.desc}</span>
+                        </div>
+                        <button onClick={() => setIssueCasesModal({ title: `${issue.model} - ${issue.desc}`, cases: issue.cases })} className="font-black text-slate-800 bg-white hover:bg-rose-50 hover:text-rose-600 px-2.5 py-1 rounded-lg border text-xs whitespace-nowrap">
+                          {issue.cases.length}건 🔍
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 📥 다운로드 센터 탭 (하위 폴더 구분) */}
+          {activeTab === 'downloads' && (
+            <div className="space-y-6 animate-fade-in">
+              {/* 상단 컨트롤 바 */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 mb-1">📥 MEKICS 자료 및 소프트웨어 다운로드 센터</h3>
+                  <p className="text-xs text-slate-500">원하시는 폴더(1. Software Download / 2. Manual Download)를 선택하여 최신 펌웨어 및 기술 매뉴얼을 받으세요.</p>
+                </div>
+                <button 
+                  onClick={() => setShowUploadDownloadModal(true)} 
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition shadow flex items-center gap-2"
+                >
+                  📤 신규 SW / 자료 등록
+                </button>
+              </div>
+
+              {/* 📂 하위 폴더 메인 구분 탭 (Software Download / Manual Download) */}
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => setDownloadSubTab('sw')}
+                  className={`p-5 rounded-2xl border-2 text-left transition flex items-center gap-4 shadow-sm ${downloadSubTab === 'sw' ? 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-500/20' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                >
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl font-bold ${downloadSubTab === 'sw' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    💻
+                  </div>
+                  <div>
+                    <h4 className="font-black text-base">1. Software Download</h4>
+                    <p className="text-xs opacity-75 mt-0.5">Boot, Main, Pneumatic 최신 펌웨어 패키지 (.zip)</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setDownloadSubTab('manual')}
+                  className={`p-5 rounded-2xl border-2 text-left transition flex items-center gap-4 shadow-sm ${downloadSubTab === 'manual' ? 'bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500/20' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                >
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl font-bold ${downloadSubTab === 'manual' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    📚
+                  </div>
+                  <div>
+                    <h4 className="font-black text-base">2. Manual Download</h4>
+                    <p className="text-xs opacity-75 mt-0.5">유저 매뉴얼, 서비스 매뉴얼, 퀵 가이드 (.pdf)</p>
+                  </div>
+                </button>
+              </div>
+
+              {/* 제품 선택 칩 & 검색바 */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-400">제품 필터:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button 
+                        onClick={() => setSelectedDownloadProduct('all')}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition border ${selectedDownloadProduct === 'all' ? 'bg-slate-800 text-white border-slate-800 shadow' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                      >
+                        전체 보기
+                      </button>
+                      {DOWNLOAD_PRODUCTS.map(p => (
+                        <button 
+                          key={p}
+                          onClick={() => setSelectedDownloadProduct(p)}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition border ${selectedDownloadProduct === p ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <input 
+                    type="text" 
+                    placeholder="🔍 파일명, 버전, 설명 검색..." 
+                    value={downloadSearch}
+                    onChange={e => setDownloadSearch(e.target.value)}
+                    className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* 폴더 내 파일 리스트 Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredDownloadFiles.length === 0 ? (
+                  <div className="col-span-full bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 font-medium">
+                    {downloadSubTab === 'sw' ? '등록되거나 검색된 소프트웨어(.zip)가 없습니다.' : '등록되거나 검색된 매뉴얼(.pdf)이 없습니다.'}
+                  </div>
+                ) : (
+                  filteredDownloadFiles.map((item) => (
+                    <div key={item.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-4">
+                      <div>
+                        <div className="flex justify-between items-start mb-3">
+                          <span className="bg-blue-50 text-blue-700 font-mono font-black text-xs px-2.5 py-1 rounded-lg border border-blue-100">
+                            {item.product}
+                          </span>
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${item.category === 'sw' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}>
+                            {item.type}
+                          </span>
+                        </div>
+                        <h4 className="font-extrabold text-slate-800 text-base mb-1 truncate" title={item.file_name}>
+                          {item.file_name}
+                        </h4>
+                        <p className="text-xs text-slate-500 mb-3 leading-relaxed">{item.description}</p>
+                        <div className="text-xs text-slate-400 space-y-1 font-mono">
+                          <p>버전: <strong className="text-slate-700 font-bold">{item.version}</strong></p>
+                          <p>등록일: {item.release_date}</p>
+                        </div>
+                      </div>
+
+                      <a 
+                        href={item.file_url} 
+                        download
+                        className={`w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition shadow-sm ${item.category === 'sw' ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+                      >
+                        {item.category === 'sw' ? '💾 펌웨어(.zip) 다운로드' : '📄 매뉴얼(.pdf) 다운로드'}
+                      </a>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
           {/* 워런티 전용 조회 탭 */}
           {activeTab === 'warranty' && (
             <div className="space-y-6 animate-fade-in">
@@ -877,52 +1248,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* 매출 현황 (Home) */}
-          {activeTab === 'home' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 animate-fade-in">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-200 pb-5 mb-6 gap-4">
-                <h2 className="text-2xl font-black text-slate-800">매출 현황 : <span className="font-medium text-slate-600 text-lg ml-2">2026년 누적 실적 현황 (단위: 억원)</span></h2>
-                <div className="flex items-center gap-5 text-sm font-bold bg-slate-50 px-4 py-2 rounded-lg border border-slate-200">
-                  <div className="flex items-center gap-2"><span className="w-4 h-4 bg-blue-500 rounded shadow-sm"></span>목표</div>
-                  <div className="flex items-center gap-2"><span className="w-4 h-4 bg-rose-500 rounded shadow-sm"></span>실적</div>
-                </div>
-              </div>
-              <div className="w-full bg-white rounded-xl mb-8 overflow-x-auto">
-                <div className="h-[320px] flex items-end gap-3 md:gap-5 min-w-[800px] pb-8 relative">
-                  {reportData.map((d, idx) => {
-                    const tHeight = (d.target / maxVal) * 100; const aHeight = (d.actual / maxVal) * 100
-                    return (
-                      <div key={idx} className={`flex-1 flex flex-col items-center justify-end h-full ${d.isGroup ? 'bg-slate-50 rounded-xl border border-slate-100' : ''}`}>
-                        <div className="flex items-end gap-1.5 w-full justify-center h-full group">
-                          <div className="w-10 md:w-14 bg-blue-500 rounded-t-md relative flex flex-col justify-end shadow-md" style={{ height: `${tHeight}%` }}><span className="absolute -top-7 w-full text-center text-xs font-black text-blue-600">{d.target.toFixed(2)}</span></div>
-                          <div className="w-10 md:w-14 bg-rose-500 rounded-t-md relative flex flex-col justify-end shadow-md" style={{ height: `${aHeight}%` }}><span className="absolute -top-7 w-full text-center text-xs font-black text-rose-600">{d.actual.toFixed(2)}</span></div>
-                        </div>
-                        <span className="text-sm font-bold text-slate-700 mt-5 whitespace-nowrap">{d.label}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-              <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-sm">
-                <table className="w-full text-center text-sm whitespace-nowrap">
-                  <thead>
-                    <tr className="bg-slate-100 border-b border-slate-300">
-                      <th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>매출현황</th><th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>국내</th><th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>해외 대리점</th><th className="p-3 border-b border-r border-slate-300 font-bold text-slate-800" colSpan={3}>서비스</th><th className="p-3 border-b border-r border-slate-300 font-bold text-slate-800" colSpan={5}>전략 (지사/해외)</th><th className="p-4 font-bold text-slate-800" rowSpan={2}>총합계</th>
-                    </tr>
-                    <tr className="bg-slate-50 border-b border-slate-300 text-xs">
-                      <th className="p-3 border-r border-slate-200 text-slate-600 font-bold">국내서비스</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">해외서비스</th><th className="p-3 border-r border-slate-300 bg-slate-100 text-slate-800 font-bold">서비스합계</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">CKD</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">지사-인도</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">지사-터키</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">일본</th><th className="p-3 border-r border-slate-300 text-slate-600 font-bold">미국</th>
-                    </tr>
-                  </thead>
-                  <tbody className="font-medium text-slate-700">
-                    <tr className="border-b border-slate-200 bg-white"><td className="p-4 border-r border-slate-300 font-black text-slate-800">목표</td>{reportData.map((d, i) => <td key={i} className={`p-4 font-bold text-blue-700 ${d.isGroup ? 'bg-slate-50 border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{d.target.toFixed(2)}</td>)}<td className="p-4 font-black text-blue-800 bg-blue-50 text-base">{totalTarget.toFixed(2)}</td></tr>
-                    <tr className="border-b border-slate-200 bg-white"><td className="p-4 border-r border-slate-300 font-black text-slate-800">실적</td>{reportData.map((d, i) => <td key={i} className={`p-4 font-bold text-rose-600 ${d.isGroup ? 'bg-slate-50 border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{d.actual.toFixed(2)}</td>)}<td className="p-4 font-black text-rose-700 bg-rose-50 text-base">{totalActual.toFixed(2)}</td></tr>
-                    <tr className="bg-slate-50"><td className="p-4 border-r border-slate-300 font-black text-slate-800">달성%</td>{reportData.map((d, i) => { const pct = d.target ? Math.round((d.actual / d.target) * 100) : 0; return <td key={i} className={`p-4 font-black ${pct >= 100 ? 'text-blue-600' : 'text-slate-600'} ${d.isGroup ? 'border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{pct}%</td> })}<td className="p-4 font-black text-slate-800 bg-slate-200 text-base">{totalTarget ? Math.round((totalActual / totalTarget) * 100) : 0}%</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
           {/* 생산이력조회 */}
           {activeTab === 'production' && (
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
@@ -981,8 +1306,6 @@ export default function Dashboard() {
               {/* 📅 상세 날짜 및 담당자/시장 다중 필터링 바 */}
               <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                  
-                  {/* 날짜 범위 검색 */}
                   <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
                     <span>📅 매출 기간:</span>
                     <input 
@@ -1000,7 +1323,6 @@ export default function Dashboard() {
                     />
                   </div>
 
-                  {/* 날짜 퀵 필터 버튼들 */}
                   <div className="flex items-center gap-1.5 text-xs font-bold bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
                     <button onClick={() => applyDatePreset('month')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">당월</button>
                     <button onClick={() => applyDatePreset('q1')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">1분기</button>
@@ -1014,7 +1336,6 @@ export default function Dashboard() {
 
                 <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-3">
                   <div className="flex items-center gap-4">
-                    {/* 시장 구분 필터 */}
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
                       <span>🌐 구분:</span>
                       <select 
@@ -1028,7 +1349,6 @@ export default function Dashboard() {
                       </select>
                     </div>
 
-                    {/* 담당자 필터 */}
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
                       <span>👤 담당자:</span>
                       <select 
@@ -1044,7 +1364,6 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* 통합 키워드 검색창 */}
                   <input
                     type="text"
                     placeholder="🔍 시리얼 번호, 품목명, 거래처명 검색..."
@@ -1055,7 +1374,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* 💵 선택 조건 필터 실시간 매출 합계 바 */}
               <div className="bg-emerald-50 border border-emerald-200 px-6 py-3.5 rounded-xl flex justify-between items-center text-sm font-bold text-emerald-900">
                 <span>📊 조회 조건 합계 집계 ({filteredSalesRecords.length}건)</span>
                 <span className="text-xl font-black text-emerald-700">총 ₩{filteredSalesTotalAmount.toLocaleString()} 원</span>
@@ -1111,7 +1429,6 @@ export default function Dashboard() {
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* 우수 대리점 TOP 10 */}
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <h4 className="font-bold text-slate-800 flex items-center gap-2">🏆 서비스/부품 구매 우수 대리점 TOP 10 <span className="text-xs text-blue-600 font-normal">({currentYear}년)</span></h4>
@@ -1150,7 +1467,6 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* 주요 고장 증상 TOP 5 */}
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <h4 className="font-bold text-slate-800 flex items-center gap-2">🚨 제품별 주요 고장 증상 TOP 5</h4>
@@ -1240,6 +1556,110 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      {/* 📤 신규 SW / 매뉴얼 등록 모달 */}
+      {showUploadDownloadModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-8 shadow-2xl border border-slate-200">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <h3 className="text-xl font-black text-slate-800">📤 신규 SW / 기술 자료 등록</h3>
+              <button onClick={() => setShowUploadDownloadModal(false)} className="text-slate-400 hover:text-slate-700 text-2xl font-bold">✖</button>
+            </div>
+
+            <form onSubmit={handleUploadDownloadSubmit} className="space-y-4 text-sm">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">대상 제품 (Product)</label>
+                  <select 
+                    value={downloadUploadForm.product} 
+                    onChange={e => setDownloadUploadForm({...downloadUploadForm, product: e.target.value})}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 font-bold"
+                  >
+                    {DOWNLOAD_PRODUCTS.map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">카테고리</label>
+                  <select 
+                    value={downloadUploadForm.category} 
+                    onChange={e => {
+                      const cat = e.target.value
+                      setDownloadUploadForm({
+                        ...downloadUploadForm, 
+                        category: cat,
+                        type: cat === 'sw' ? 'Main' : '유저 매뉴얼'
+                      })
+                    }}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 font-bold"
+                  >
+                    <option value="sw">💻 소프트웨어 / 펌웨어 (.zip)</option>
+                    <option value="manual">📚 기술 문서 / 매뉴얼 (.pdf)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">세부 종류 (Type)</label>
+                  <select 
+                    value={downloadUploadForm.type} 
+                    onChange={e => setDownloadUploadForm({...downloadUploadForm, type: e.target.value})}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 font-bold"
+                  >
+                    {downloadUploadForm.category === 'sw' ? (
+                      SW_TYPES.map(t => <option key={t} value={t}>{t}</option>)
+                    ) : (
+                      MANUAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">버전 (Version / Rev)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="예: v1.05.00 또는 Rev.01" 
+                    value={downloadUploadForm.version} 
+                    onChange={e => setDownloadUploadForm({...downloadUploadForm, version: e.target.value})}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 font-bold" 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">설명 (Description)</label>
+                <input 
+                  type="text" 
+                  placeholder="예: HFT700 최신 유공압 모듈 개선 버전" 
+                  value={downloadUploadForm.description} 
+                  onChange={e => setDownloadUploadForm({...downloadUploadForm, description: e.target.value})}
+                  className="w-full border border-slate-300 rounded-xl p-2.5" 
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">파일 첨부 (.zip 또는 .pdf)</label>
+                <input 
+                  type="file" 
+                  required
+                  accept=".zip, .rar, .7z, .pdf"
+                  onChange={e => setUploadingDownloadFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs border border-dashed border-slate-300 p-3 rounded-xl bg-slate-50 cursor-pointer" 
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button type="button" onClick={() => setShowUploadDownloadModal(false)} className="px-5 py-2.5 bg-slate-100 font-bold rounded-xl text-slate-700">취소</button>
+                <button type="submit" disabled={uploading} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 font-bold text-white rounded-xl shadow">
+                  {uploading ? '업로드 중...' : '등록 완료'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 🏪 대리점 매출 이력 모달 팝업 */}
       {agencyModal && (
