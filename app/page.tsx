@@ -558,14 +558,15 @@ export default function Dashboard() {
   serviceSales.forEach(s => { const name = s.customer_name || '미등록'; agencyMap[name] = (agencyMap[name] || 0) + Number(s.amount) })
   const top10Agencies = Object.entries(agencyMap).sort((a,b) => b[1] - a[1]).slice(0, 10)
 
-  const issueMap: Record<string, number> = {}
-  allServiceCases.forEach(sc => {
-    const eq = equipments.find(e => e.serial_number === sc.serial_number)
-    const model = eq ? eq.model_name : (sc.product_model || 'Unknown')
-    const desc = sc.symptom || sc.issue_description || '기타 고장'
-    const key = `${model}|${desc.substring(0, 25)}`
-    issueMap[key] = (issueMap[key] || 0) + 1
-  })
+const issueMap: Record<string, number> = {}
+allServiceCases.forEach(sc => {
+  const eq = equipments.find(e => e.serial_number === sc.serial_number)
+  // ⭕ DB에 없어도 시리얼 번호로 모델명(HFT700, MV2000 등)을 자동 감지
+  const model = eq ? eq.model_name : getModelFromSN(sc.serial_number, sc.product_model)
+  const desc = sc.symptom || sc.issue_description || '기타 고장'
+  const key = `${model}|${desc.substring(0, 25)}`
+  issueMap[key] = (issueMap[key] || 0) + 1
+})
   const top5Issues = Object.entries(issueMap).sort((a,b) => b[1] - a[1]).slice(0, 5).map(e => {
     const parts = e[0].split('|')
     return { model: parts[0], desc: parts[1], count: e[1] }
