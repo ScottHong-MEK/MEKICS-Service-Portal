@@ -6,13 +6,13 @@ import * as XLSX from 'xlsx'
 
 // 1. MSM 고장 원인 중분류 및 대표 처리 구분 매핑
 const CAUSE_CLASSIFICATIONS = [
-  { code: 'A', label: '기타' },
+  { code: 'A', label: '기타' },
   { code: 'B', label: '사용자부주의' },
+  { code: 'C', label: '성능불만족' },
+  { code: 'D', label: '악세서리불량' },
+  { code: 'E', label: '증상재현안됨' },
   { code: 'F', label: '원자재불량' },
-  { code: 'D', label: '악세서리불량' },
-  { code: 'C', label: '성능불만족' },
-  { code: 'E', label: '증상재현안됨' },
-  { code: 'X', label: '미분류' },
+  { code: 'X', label: '미분류' },
 ]
 
 const ACTION_CLASSIFICATIONS = [
@@ -182,8 +182,16 @@ export default function Dashboard() {
     repair_period: '', repair_cost: 0, inspector: 'Scott Hong', processing_date: new Date().toISOString().slice(0, 10)
   })
 
+  // 탭 및 팝업 모달 상태
+  const [agencyTab, setAgencyTab] = useState<'domestic' | 'overseas'>('domestic')
+  const [issueTab, setIssueTab] = useState<'domestic' | 'overseas'>('domestic')
+  const [agencyModal, setAgencyModal] = useState<{ name: string; records: any[] } | null>(null)
+  const [issueCasesModal, setIssueCasesModal] = useState<{ title: string; cases: any[] } | null>(null)
+
   const prodFileInputRef = useRef<HTMLInputElement>(null)
   const salesFileInputRef = useRef<HTMLInputElement>(null)
+
+  const currentYear = new Date().getFullYear().toString() // "2026"
 
   useEffect(() => {
     setIsMounted(true)
@@ -546,31 +554,59 @@ export default function Dashboard() {
   const totalActual = reportData.filter(d => !d.isGroup).reduce((acc, curr) => acc + curr.actual, 0)
   const maxVal = Math.max(...reportData.map(d => Math.max(d.target, d.actual))) * 1.2
 
-  // 서비스 통계
-  const serviceSales = salesRecords.filter(s => s.item_type === '서비스')
+  // --- 💡 서비스 파트 통계 및 탭 가공 (올해 데이터만 한정) ---
+  const serviceSales = salesRecords.filter(s => {
+    const isService = s.item_type === '서비스'
+    const isCurrentYear = s.sales_date ? s.sales_date.startsWith(currentYear) : true
+    return isService && isCurrentYear
+  })
   const totalServiceSalesAmt = serviceSales.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0)
 
   const partsMap: Record<string, number> = {}
   serviceSales.forEach(s => { const name = s.item_name || '기타 부품'; partsMap[name] = (partsMap[name] || 0) + Number(s.amount) })
   const top10Parts = Object.entries(partsMap).sort((a,b) => b[1] - a[1]).slice(0, 10)
 
-  const agencyMap: Record<string, number> = {}
-  serviceSales.forEach(s => { const name = s.customer_name || '미등록'; agencyMap[name] = (agencyMap[name] || 0) + Number(s.amount) })
-  const top10Agencies = Object.entries(agencyMap).sort((a,b) => b[1] - a[1]).slice(0, 10)
+  // 국내/해외 우수 대리점 구분 (올해 매출 기준)
+  const domesticAgencyMap: Record<string, number> = {}
+  const overseasAgencyMap: Record<string, number> = {}
 
-const issueMap: Record<string, number> = {}
-allServiceCases.forEach(sc => {
-  const eq = equipments.find(e => e.serial_number === sc.serial_number)
-  // ⭕ DB에 없어도 시리얼 번호로 모델명(HFT700, MV2000 등)을 자동 감지
-  const model = eq ? eq.model_name : getModelFromSN(sc.serial_number, sc.product_model)
-  const desc = sc.symptom || sc.issue_description || '기타 고장'
-  const key = `${model}|${desc.substring(0, 25)}`
-  issueMap[key] = (issueMap[key] || 0) + 1
-})
-  const top5Issues = Object.entries(issueMap).sort((a,b) => b[1] - a[1]).slice(0, 5).map(e => {
-    const parts = e[0].split('|')
-    return { model: parts[0], desc: parts[1], count: e[1] }
+  serviceSales.forEach(s => {
+    const name = s.customer_name || '미등록'
+    const amt = Number(s.amount) || 0
+    if (s.market_type === '국내') {
+      domesticAgencyMap[name] = (domesticAgencyMap[name] || 0) + amt
+    } else {
+      overseasAgencyMap[name] = (overseasAgencyMap[name] || 0) + amt
+    }
   })
+
+  const top10DomesticAgencies = Object.entries(domesticAgencyMap).sort((a,b) => b[1] - a[1]).slice(0, 10)
+  const top10OverseasAgencies = Object.entries(overseasAgencyMap).sort((a,b) => b[1] - a[1]).slice(0, 10)
+  const currentAgencies = agencyTab === 'domestic' ? top10DomesticAgencies : top10OverseasAgencies
+
+  // 국내/해외 주요 고장 증상 구분
+  const domesticIssueMap: Record<string, { model: string; desc: string; cases: any[] }> = {}
+  const overseasIssueMap: Record<string, { model: string; desc: string; cases: any[] }> = {}
+
+  allServiceCases.forEach(sc => {
+    const eq = equipments.find(e => e.serial_number === sc.serial_number)
+    const model = eq ? eq.model_name : getModelFromSN(sc.serial_number, sc.product_model)
+    const desc = sc.symptom || sc.issue_description || '기타 고장'
+    const key = `${model}|${desc.substring(0, 30)}`
+
+    const sales = salesRecords.find(s => s.serial_number === sc.serial_number)
+    const isDomestic = sales ? (sales.market_type === '국내') : !(/[a-zA-Z]/.test(sc.hospital_name || '') && !sc.hospital_name?.includes('병원'))
+
+    const targetMap = isDomestic ? domesticIssueMap : overseasIssueMap
+    if (!targetMap[key]) {
+      targetMap[key] = { model, desc, cases: [] }
+    }
+    targetMap[key].cases.push(sc)
+  })
+
+  const top5DomesticIssues = Object.values(domesticIssueMap).sort((a,b) => b.cases.length - a.cases.length).slice(0, 5)
+  const top5OverseasIssues = Object.values(overseasIssueMap).sort((a,b) => b.cases.length - a.cases.length).slice(0, 5)
+  const currentIssues = issueTab === 'domestic' ? top5DomesticIssues : top5OverseasIssues
 
   const exportServiceExcel = () => {
     const ws = XLSX.utils.json_to_sheet(allServiceCases.map(c => {
@@ -918,11 +954,11 @@ allServiceCases.forEach(sc => {
             <div className="space-y-6 animate-fade-in">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-1">
-                  <h3 className="font-bold text-slate-500 mb-1">올해 서비스 파트 총 매출</h3>
+                  <h3 className="font-bold text-slate-500 mb-1">올해 서비스 파트 총 매출 ({currentYear}년)</h3>
                   <p className="text-3xl font-black text-blue-700 mb-6 border-b border-slate-100 pb-6">₩{totalServiceSalesAmt.toLocaleString()}</p>
                   <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">🥇 많이 판매된 부품 TOP 10</h4>
                   <div className="space-y-3">
-                    {top10Parts.length === 0 ? <p className="text-sm text-slate-400">데이터가 없습니다.</p> : top10Parts.map(([part, amt], idx) => (
+                    {top10Parts.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p> : top10Parts.map(([part, amt], idx) => (
                       <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
                         <span className="font-medium text-slate-700 truncate pr-2"><span className="text-slate-400 font-bold mr-2">{idx+1}</span>{part}</span>
                         <span className="font-mono font-bold text-blue-600">₩{(amt/1000).toLocaleString(undefined, {maximumFractionDigits:0})}k</span>
@@ -932,27 +968,78 @@ allServiceCases.forEach(sc => {
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* 우수 대리점 TOP 10 */}
                   <div>
-                    <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">🏆 서비스/부품 구매 우수 대리점 TOP 10</h4>
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-bold text-slate-800 flex items-center gap-2">🏆 서비스/부품 구매 우수 대리점 TOP 10 <span className="text-xs text-blue-600 font-normal">({currentYear}년)</span></h4>
+                      <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
+                        <button 
+                          onClick={() => setAgencyTab('domestic')}
+                          className={`px-3 py-1 rounded-md transition ${agencyTab === 'domestic' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                          국내
+                        </button>
+                        <button 
+                          onClick={() => setAgencyTab('overseas')}
+                          className={`px-3 py-1 rounded-md transition ${agencyTab === 'overseas' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                          해외
+                        </button>
+                      </div>
+                    </div>
                     <div className="space-y-3">
-                      {top10Agencies.length === 0 ? <p className="text-sm text-slate-400">데이터가 없습니다.</p> : top10Agencies.map(([agency, amt], idx) => (
+                      {currentAgencies.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p> : currentAgencies.map(([agency, amt], idx) => (
                         <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
-                          <span className="font-medium text-slate-700 truncate pr-2"><span className="text-slate-400 font-bold mr-2">{idx+1}</span>{agency}</span>
-                          <span className="font-mono font-bold text-emerald-600">₩{(amt/1000).toLocaleString(undefined, {maximumFractionDigits:0})}k</span>
+                          <span 
+                            onClick={() => {
+                              const records = salesRecords.filter(s => s.customer_name === agency && (s.sales_date || '').startsWith(currentYear))
+                              setAgencyModal({ name: agency, records })
+                            }}
+                            className="font-medium text-slate-700 truncate pr-2 cursor-pointer hover:text-blue-600 hover:underline flex items-center gap-1"
+                            title="클릭하여 상세 매출 이력 보기"
+                          >
+                            <span className="text-slate-400 font-bold mr-1">{idx+1}</span>
+                            {agency}
+                          </span>
+                          <span className="font-mono font-bold text-emerald-600 whitespace-nowrap">₩{(amt/1000).toLocaleString(undefined, {maximumFractionDigits:0})}k</span>
                         </div>
                       ))}
                     </div>
                   </div>
+
+                  {/* 주요 고장 증상 TOP 5 */}
                   <div>
-                    <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">🚨 제품별 주요 고장 증상 TOP 5</h4>
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-bold text-slate-800 flex items-center gap-2">🚨 제품별 주요 고장 증상 TOP 5</h4>
+                      <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
+                        <button 
+                          onClick={() => setIssueTab('domestic')}
+                          className={`px-3 py-1 rounded-md transition ${issueTab === 'domestic' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                          국내
+                        </button>
+                        <button 
+                          onClick={() => setIssueTab('overseas')}
+                          className={`px-3 py-1 rounded-md transition ${issueTab === 'overseas' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                          해외
+                        </button>
+                      </div>
+                    </div>
                     <div className="space-y-3">
-                      {top5Issues.length === 0 ? <p className="text-sm text-slate-400">데이터가 없습니다.</p> : top5Issues.map((issue, idx) => (
+                      {currentIssues.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p> : currentIssues.map((issue, idx) => (
                         <div key={idx} className="flex justify-between items-center text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
-                          <div>
-                            <span className="block text-xs font-black text-rose-500 mb-1">{issue.model}</span>
-                            <span className="font-medium text-slate-700">{issue.desc}...</span>
+                          <div className="pr-2 truncate">
+                            <span className="block text-xs font-black text-rose-500 mb-0.5">{issue.model}</span>
+                            <span className="font-medium text-slate-700 truncate block">{issue.desc}</span>
                           </div>
-                          <span className="font-black text-slate-800 bg-white px-3 py-1 rounded-lg shadow-sm border border-slate-200">{issue.count}건</span>
+                          <button 
+                            onClick={() => setIssueCasesModal({ title: `${issue.model} - ${issue.desc}`, cases: issue.cases })}
+                            className="font-black text-slate-800 bg-white hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 px-3 py-1 rounded-lg shadow-sm border border-slate-200 transition whitespace-nowrap text-xs flex items-center gap-1"
+                            title="클릭하여 접수 건 상세 보기"
+                          >
+                            {issue.cases.length}건 🔍
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1010,6 +1097,122 @@ allServiceCases.forEach(sc => {
           )}
         </main>
       </div>
+
+      {/* 🏪 대리점 매출 이력 모달 팝업 */}
+      {agencyModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-3xl w-full p-8 shadow-2xl border border-slate-200 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <div>
+                <h3 className="text-xl font-black text-slate-800">🏪 {agencyModal.name} - {currentYear}년 부품/서비스 매출 이력</h3>
+                <p className="text-xs text-slate-500 mt-1">총 {agencyModal.records.length}건의 매출 내역이 조회되었습니다.</p>
+              </div>
+              <button onClick={() => setAgencyModal(null)} className="text-slate-400 hover:text-slate-700 text-2xl font-bold">✖</button>
+            </div>
+
+            {agencyModal.records.length === 0 ? (
+              <p className="text-center text-slate-400 py-8 font-medium">올해 등록된 매출 내역이 없습니다.</p>
+            ) : (
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-slate-100 text-slate-700">
+                    <tr>
+                      <th className="p-3">매출일자</th>
+                      <th className="p-3">시리얼 번호</th>
+                      <th className="p-3">품목명</th>
+                      <th className="p-3">구분</th>
+                      <th className="p-3 text-right">매출액 (KRW)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {agencyModal.records.map((r, i) => (
+                      <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="p-3 font-mono text-slate-600">{r.sales_date}</td>
+                        <td className="p-3 font-mono font-bold text-blue-700">{r.serial_number}</td>
+                        <td className="p-3 font-medium text-slate-800">{r.item_name || '-'}</td>
+                        <td className="p-3"><span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs border border-blue-200 font-bold">{r.item_type || '서비스'}</span></td>
+                        <td className="p-3 text-right font-black text-slate-900">₩{Number(r.amount || 0).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-6 border-t border-slate-100 mt-6">
+              <button onClick={() => setAgencyModal(null)} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚨 고장 증상 건수 상세 모달 팝업 */}
+      {issueCasesModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-8 shadow-2xl border border-slate-200 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <div>
+                <h3 className="text-xl font-black text-slate-800">🚨 {issueCasesModal.title} (총 {issueCasesModal.cases.length}건)</h3>
+                <p className="text-xs text-slate-500 mt-1">해당 고장 증상으로 접수된 A/S 상세 건 목록입니다.</p>
+              </div>
+              <button onClick={() => setIssueCasesModal(null)} className="text-slate-400 hover:text-slate-700 text-2xl font-bold">✖</button>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-slate-100 text-slate-700">
+                  <tr>
+                    <th className="p-3">접수번호</th>
+                    <th className="p-3">시리얼 번호</th>
+                    <th className="p-3">병원/대리점</th>
+                    <th className="p-3">상태</th>
+                    <th className="p-3">증상 및 요청사항</th>
+                    <th className="p-3">레포트</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {issueCasesModal.cases.map((sc, i) => (
+                    <tr key={i} className="border-b border-slate-100 hover:bg-rose-50/50">
+                      <td className="p-3 font-mono font-black text-rose-600">{sc.case_number}</td>
+                      <td className="p-3 font-mono font-bold text-blue-700">{sc.serial_number}</td>
+                      <td className="p-3 font-bold text-slate-800">{sc.hospital_name || '-'}</td>
+                      <td className="p-3"><span className={`px-2.5 py-0.5 rounded text-xs font-bold border ${sc.status==='Closed'?'bg-emerald-50 text-emerald-700 border-emerald-200':'bg-amber-50 text-amber-700 border-amber-200'}`}>{sc.status}</span></td>
+                      <td className="p-3 font-medium text-slate-800 truncate max-w-xs">{sc.symptom || sc.issue_description}</td>
+                      <td className="p-3">
+                        <button 
+                          onClick={() => {
+                            setSelectedReportCase(sc)
+                            setReportEditForm({
+                              reviewer: sc.reviewer||'Scott Hong',
+                              reviewer_date: sc.created_at?.slice(0,10)||new Date().toISOString().slice(0,10),
+                              classification: sc.classification||'warranty in',
+                              cause_code: sc.cause_code||'X',
+                              action_code: sc.action_code||'PC00',
+                              cause_analysis: sc.cause_analysis||'',
+                              repair_info: sc.repair_info||'',
+                              repair_period: sc.repair_period||'2026.08.01 ~ 2026.08.10',
+                              repair_cost: sc.repair_cost||0,
+                              inspector: sc.inspector||'Scott Hong',
+                              processing_date: sc.processing_date||new Date().toISOString().slice(0,10)
+                            })
+                          }}
+                          className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold px-2.5 py-1 rounded text-xs shadow-sm"
+                        >
+                          📄 보기
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end pt-6 border-t border-slate-100 mt-6">
+              <button onClick={() => setIssueCasesModal(null)} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 🛠️ 신규 서비스 접수 모달 */}
       {showNewServiceModal && (
