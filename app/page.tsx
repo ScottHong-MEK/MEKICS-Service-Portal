@@ -4,7 +4,30 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import * as XLSX from 'xlsx'
 
-// 1. 주문코드(품목코드) 기준 매출 구분 매핑 테이블 
+// 1. MSM 고장 원인 중분류 및 대표 처리 구분 매핑
+const CAUSE_CLASSIFICATIONS = [
+  { code: 'X', label: '미분류' },
+  { code: 'B', label: '사용자부주의' },
+  { code: 'F', label: '원자재불량' },
+  { code: 'D', label: '악세서리불량' },
+  { code: 'C', label: '성능불만족' },
+  { code: 'E', label: '증상재현안됨' },
+  { code: 'A', label: '기타' },
+]
+
+const ACTION_CLASSIFICATIONS = [
+  { code: 'PC00', label: '미결정' },
+  { code: 'PC01', label: '부품교체' },
+  { code: 'PC02', label: '사용자교육' },
+  { code: 'PC03', label: '수리취소' },
+  { code: 'PC04', label: '장비점검' },
+  { code: 'PC05', label: '조정수리' },
+  { code: 'PC06', label: '폐기' },
+  { code: 'PC07', label: '장비교체' },
+  { code: 'PC08', label: '소모품교체' },
+]
+
+// 2. 주문코드(품목코드) 기준 매출 구분 매핑 테이블 
 const ORDER_CODE_MAP: Record<string, string> = {
   "MB0019_09": "상품", "MA0115_01": "서비스", "AR0110_00": "상품", "PG0305_00": "상품", "MA0420_00": "상품",
   "PG0330_02": "상품", "MA0335_04": "서비스", "MV0030_09": "제품", "AG0035_00": "OPTION", "PG0092_00": "서비스",
@@ -124,10 +147,10 @@ export default function Dashboard() {
   const [salesRecords, setSalesRecords] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-const [attachedFiles, setAttachedFiles] = useState<File[]>([])
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [uploadingFiles, setUploadingFiles] = useState(false)
   
-const [prodSearch, setProdSearch] = useState('')
+  const [prodSearch, setProdSearch] = useState('')
   const [salesSearch, setSalesSearch] = useState('')
 
   const [serialQuery, setSerialQuery] = useState('')
@@ -147,14 +170,15 @@ const [prodSearch, setProdSearch] = useState('')
 
   const [serviceForm, setServiceForm] = useState({
     hospital_name: '', contact_person: '', contact_phone: '', email: '',
-    symptom: '', problem_description: '', priority: 'Medium', classification: 'warranty in', remark: ''
+    symptom: '', problem_description: '', priority: 'Medium', classification: 'warranty in',
+    cause_code: 'X', action_code: 'PC00', remark: ''
   })
 
   const [reportModalCase, setSelectedReportCase] = useState<any>(null)
   const [isEditingReport, setIsEditingReport] = useState(false)
   const [reportEditForm, setReportEditForm] = useState({
     reviewer: 'Scott Hong', reviewer_date: new Date().toISOString().slice(0, 10),
-    classification: 'warranty in', cause_analysis: '', repair_info: '',
+    classification: 'warranty in', cause_code: 'X', action_code: 'PC00', cause_analysis: '', repair_info: '',
     repair_period: '', repair_cost: 0, inspector: 'Scott Hong', processing_date: new Date().toISOString().slice(0, 10)
   })
 
@@ -177,7 +201,7 @@ const [prodSearch, setProdSearch] = useState('')
     return () => subscription.unsubscribe()
   }, [])
 
-// --- 🔍 생산이력 및 매출현황 검색 필터링 ---
+  // --- 🔍 생산이력 및 매출현황 검색 필터링 ---
   const filteredEquipments = equipments.filter((item: any) => {
     if (!prodSearch.trim()) return true
     const q = prodSearch.toLowerCase()
@@ -192,9 +216,10 @@ const [prodSearch, setProdSearch] = useState('')
     if (!salesSearch.trim()) return true
     const q = salesSearch.toLowerCase()
     return (
-(item.serial_number || '').toLowerCase().includes(q) ||
-(item.customer_name || item.hospital_name || '').toLowerCase().includes(q) ||
-(item.item_name || item.product_model || '').toLowerCase().includes(q)    )
+      (item.serial_number || '').toLowerCase().includes(q) ||
+      (item.customer_name || item.hospital_name || '').toLowerCase().includes(q) ||
+      (item.item_name || item.product_model || '').toLowerCase().includes(q)
+    )
   })
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -265,12 +290,11 @@ const [prodSearch, setProdSearch] = useState('')
     }))
   }
 
-const handleSubmitNewService = async (e: React.FormEvent) => {
+  const handleSubmitNewService = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newServiceSn.trim()) return alert('시리얼 번호를 입력해주세요.')
     const caseNo = `CS-${Date.now().toString().slice(-6)}`
 
-    // --- 📸 파일 업로드 처리 ---
     setUploadingFiles(true)
     const uploadedUrls: string[] = []
 
@@ -289,7 +313,6 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
     }
     setUploadingFiles(false)
 
-    // --- DB에 접수 건 저장 ---
     const { error } = await supabase.from('service_cases').insert([{
       case_number: caseNo,
       serial_number: newServiceSn.trim().toUpperCase(),
@@ -302,6 +325,8 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
       problem_description: serviceForm.problem_description,
       priority: serviceForm.priority,
       classification: serviceForm.classification,
+      cause_code: serviceForm.cause_code,
+      action_code: serviceForm.action_code,
       status: 'Open',
       issue_description: serviceForm.symptom || serviceForm.problem_description,
       remark: serviceForm.remark,
@@ -315,7 +340,8 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
       setAttachedFiles([])
       setServiceForm({
         hospital_name: '', contact_person: '', contact_phone: '', email: '',
-        symptom: '', problem_description: '', priority: 'Medium', classification: 'warranty in', remark: ''
+        symptom: '', problem_description: '', priority: 'Medium', classification: 'warranty in',
+        cause_code: 'X', action_code: 'PC00', remark: ''
       })
       loadAllData()
     } else {
@@ -330,6 +356,8 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
     const { error } = await supabase.from('service_cases').update({
       status: 'Closed',
       reviewer: reportEditForm.reviewer,
+      cause_code: reportEditForm.cause_code,
+      action_code: reportEditForm.action_code,
       cause_analysis: reportEditForm.cause_analysis,
       repair_info: reportEditForm.repair_info,
       repair_period: reportEditForm.repair_period,
@@ -544,12 +572,26 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
   })
 
   const exportServiceExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(allServiceCases.map(c => ({
-      '접수번호': c.case_number, '시리얼번호': c.serial_number, '병원/대리점': c.hospital_name || '-', '담당자': c.contact_person || '-',
-      '모델명': c.product_model || equipments.find(e=>e.serial_number===c.serial_number)?.model_name || '-',
-      '워런티구분': c.classification || 'warranty in', '상태': c.status, '증상': c.symptom || c.issue_description,
-      '원인분석': c.cause_analysis || '', '수리내용': c.repair_info || c.resolution_note || '', '검수자': c.inspector || '', '처리일': c.processing_date || ''
-    })))
+    const ws = XLSX.utils.json_to_sheet(allServiceCases.map(c => {
+      const causeLabel = CAUSE_CLASSIFICATIONS.find(x => x.code === c.cause_code)?.label || c.cause_code || '미분류'
+      const actionLabel = ACTION_CLASSIFICATIONS.find(x => x.code === c.action_code)?.label || c.action_code || '미결정'
+      return {
+        '접수번호': c.case_number, 
+        '시리얼번호': c.serial_number, 
+        '병원/대리점': c.hospital_name || '-', 
+        '담당자': c.contact_person || '-',
+        '모델명': c.product_model || equipments.find(e=>e.serial_number===c.serial_number)?.model_name || '-',
+        '대표증상원인': causeLabel,
+        '대표처리구분': actionLabel,
+        '워런티구분': c.classification || 'warranty in', 
+        '상태': c.status, 
+        '증상': c.symptom || c.issue_description,
+        '원인분석': c.cause_analysis || '', 
+        '수리내용': c.repair_info || c.resolution_note || '', 
+        '검수자': c.inspector || '', 
+        '처리일': c.processing_date || ''
+      }
+    }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Service_Records")
     XLSX.writeFile(wb, `MEKICS_서비스현황_ISO심사용_${new Date().toISOString().slice(0,10)}.xlsx`)
@@ -797,16 +839,15 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
                 </button>
               </div>
 
-{/* 🔍 생산이력 검색창 */}
-        <div className="mb-4 flex justify-end">
-          <input
-            type="text"
-            placeholder="🔍 시리얼 번호, 모델명, 병원명 검색..."
-            value={prodSearch}
-            onChange={(e) => setProdSearch(e.target.value)}
-            className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm"
-          />
-        </div>
+              <div className="mb-4 flex justify-end">
+                <input
+                  type="text"
+                  placeholder="🔍 시리얼 번호, 모델명, 병원명 검색..."
+                  value={prodSearch}
+                  onChange={(e) => setProdSearch(e.target.value)}
+                  className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm"
+                />
+              </div>
 
               <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[700px] overflow-y-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
@@ -839,16 +880,15 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
                 </button>
               </div>
 
-{/* 🔍 매출현황 검색창 */}
-        <div className="mb-4 flex justify-end">
-          <input
-            type="text"
-            placeholder="🔍 시리얼 번호, 모델명, 거래처명 검색..."
-            value={salesSearch}
-            onChange={(e) => setSalesSearch(e.target.value)}
-            className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm"
-          />
-        </div>
+              <div className="mb-4 flex justify-end">
+                <input
+                  type="text"
+                  placeholder="🔍 시리얼 번호, 모델명, 거래처명 검색..."
+                  value={salesSearch}
+                  onChange={(e) => setSalesSearch(e.target.value)}
+                  className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm"
+                />
+              </div>
 
               <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[700px] overflow-y-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
@@ -937,24 +977,30 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
                 <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[500px] overflow-y-auto">
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead className="sticky top-0 bg-slate-100 text-slate-700 shadow-sm z-10">
-                      <tr><th className="p-4">접수번호</th><th className="p-4">시리얼 번호</th><th className="p-4">병원/대리점</th><th className="p-4">상태</th><th className="p-4">워런티 구분</th><th className="p-4">증상 및 요청사항</th><th className="p-4">레포트 출력</th></tr>
+                      <tr><th className="p-4">접수번호</th><th className="p-4">시리얼 번호</th><th className="p-4">병원/대리점</th><th className="p-4">대표증상원인</th><th className="p-4">대표처리구분</th><th className="p-4">상태</th><th className="p-4">워런티 구분</th><th className="p-4">증상 및 요청사항</th><th className="p-4">레포트 출력</th></tr>
                     </thead>
                     <tbody>
-                      {allServiceCases.map((sc) => (
-                        <tr key={sc.id} className="border-b border-slate-100 hover:bg-rose-50 transition">
-                          <td className="p-4 font-mono font-black text-rose-600">{sc.case_number}</td>
-                          <td className="p-4 font-mono font-bold text-blue-700 cursor-pointer hover:underline" onClick={() => handleSearch(undefined, sc.serial_number)}>{sc.serial_number}</td>
-                          <td className="p-4 font-bold text-slate-800">{sc.hospital_name || '-'}</td>
-                          <td className="p-4"><span className={`px-3 py-1 rounded-lg text-xs font-bold border shadow-sm ${sc.status==='Closed'?'bg-emerald-50 text-emerald-700 border-emerald-200':'bg-amber-50 text-amber-700 border-amber-200'}`}>{sc.status}</span></td>
-                          <td className="p-4"><span className={`px-2.5 py-1 rounded text-xs font-bold ${sc.classification==='warranty in'?'bg-blue-100 text-blue-800':'bg-slate-100 text-slate-700'}`}>{sc.classification==='warranty in'?'Warranty In (무상)':'Warranty Out (유상)'}</span></td>
-                          <td className="p-4 text-slate-800 font-medium truncate max-w-xs">{sc.symptom || sc.issue_description}</td>
-                          <td className="p-4">
-                            <button onClick={() => { setSelectedReportCase(sc); setReportEditForm({ reviewer: sc.reviewer||'Scott Hong', reviewer_date: sc.created_at?.slice(0,10)||new Date().toISOString().slice(0,10), classification: sc.classification||'warranty in', cause_analysis: sc.cause_analysis||'', repair_info: sc.repair_info||'', repair_period: sc.repair_period||'2026.08.01 ~ 2026.08.10', repair_cost: sc.repair_cost||0, inspector: sc.inspector||'Scott Hong', processing_date: sc.processing_date||new Date().toISOString().slice(0,10) }); }} className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm flex items-center gap-1">
-                              📄 레포트 보기
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {allServiceCases.map((sc) => {
+                        const causeLabel = CAUSE_CLASSIFICATIONS.find(x => x.code === sc.cause_code)?.label || sc.cause_code || '미분류'
+                        const actionLabel = ACTION_CLASSIFICATIONS.find(x => x.code === sc.action_code)?.label || sc.action_code || '미결정'
+                        return (
+                          <tr key={sc.id} className="border-b border-slate-100 hover:bg-rose-50 transition">
+                            <td className="p-4 font-mono font-black text-rose-600">{sc.case_number}</td>
+                            <td className="p-4 font-mono font-bold text-blue-700 cursor-pointer hover:underline" onClick={() => handleSearch(undefined, sc.serial_number)}>{sc.serial_number}</td>
+                            <td className="p-4 font-bold text-slate-800">{sc.hospital_name || '-'}</td>
+                            <td className="p-4 font-medium text-slate-700"><span className="bg-slate-100 px-2.5 py-1 rounded text-xs border">{causeLabel}</span></td>
+                            <td className="p-4 font-medium text-slate-700"><span className="bg-slate-100 px-2.5 py-1 rounded text-xs border">{actionLabel}</span></td>
+                            <td className="p-4"><span className={`px-3 py-1 rounded-lg text-xs font-bold border shadow-sm ${sc.status==='Closed'?'bg-emerald-50 text-emerald-700 border-emerald-200':'bg-amber-50 text-amber-700 border-amber-200'}`}>{sc.status}</span></td>
+                            <td className="p-4"><span className={`px-2.5 py-1 rounded text-xs font-bold ${sc.classification==='warranty in'?'bg-blue-100 text-blue-800':'bg-slate-100 text-slate-700'}`}>{sc.classification==='warranty in'?'Warranty In (무상)':'Warranty Out (유상)'}</span></td>
+                            <td className="p-4 text-slate-800 font-medium truncate max-w-xs">{sc.symptom || sc.issue_description}</td>
+                            <td className="p-4">
+                              <button onClick={() => { setSelectedReportCase(sc); setReportEditForm({ reviewer: sc.reviewer||'Scott Hong', reviewer_date: sc.created_at?.slice(0,10)||new Date().toISOString().slice(0,10), classification: sc.classification||'warranty in', cause_code: sc.cause_code||'X', action_code: sc.action_code||'PC00', cause_analysis: sc.cause_analysis||'', repair_info: sc.repair_info||'', repair_period: sc.repair_period||'2026.08.01 ~ 2026.08.10', repair_cost: sc.repair_cost||0, inspector: sc.inspector||'Scott Hong', processing_date: sc.processing_date||new Date().toISOString().slice(0,10) }); }} className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm flex items-center gap-1">
+                                📄 레포트 보기
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -999,6 +1045,34 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
                 )}
               </div>
 
+              {/* MSM 표준 분류 항목 선택 */}
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">대표증상원인 (고장원인중분류)</label>
+                  <select 
+                    value={serviceForm.cause_code} 
+                    onChange={e => setServiceForm({...serviceForm, cause_code: e.target.value})} 
+                    className="w-full border-2 border-slate-200 rounded-xl px-3 py-2 bg-white font-bold focus:border-blue-500 outline-none"
+                  >
+                    {CAUSE_CLASSIFICATIONS.map(c => (
+                      <option key={c.code} value={c.code}>[{c.code}] {c.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">대표처리구분 (ASCODE)</label>
+                  <select 
+                    value={serviceForm.action_code} 
+                    onChange={e => setServiceForm({...serviceForm, action_code: e.target.value})} 
+                    className="w-full border-2 border-slate-200 rounded-xl px-3 py-2 bg-white font-bold focus:border-blue-500 outline-none"
+                  >
+                    {ACTION_CLASSIFICATIONS.map(a => (
+                      <option key={a.code} value={a.code}>[{a.code}] {a.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Name of Hospital / 고객사명</label>
@@ -1018,46 +1092,46 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
                 </div>
               </div>
 
-<div className="space-y-4 border-t border-slate-100 pt-4">
-  <div>
-    <label className="block font-bold text-slate-700 mb-1">Symptom / 주요 고장 증상</label>
-    <input type="text" required placeholder="예: Humidifier Failure / Power Error" value={serviceForm.symptom} onChange={e => setServiceForm({...serviceForm, symptom: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 font-semibold" />
-  </div>
-  <div>
-    <label className="block font-bold text-slate-700 mb-1">Problem Description / 문제 상세 내역</label>
-    <textarea 
-      rows={6} 
-      placeholder="고장 현상(Symptom)과 특이사항을 상세히 기재해 주세요.&#10;- 언제부터 발생했나요?&#10;- 특정 에러 코드(Error Code)가 있나요?&#10;- 기타 특이사항:" 
-      value={serviceForm.problem_description} 
-      onChange={e => setServiceForm({...serviceForm, problem_description: e.target.value})} 
-      className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 resize-y leading-relaxed focus:border-blue-500 outline-none" 
-    />
-    <p className="text-[11px] text-slate-400 mt-1">* 엔터(Enter)로 줄바꿈이 가능하며, 우측 하단을 드래그하여 입력창 크기를 조절할 수 있습니다.</p>
-  </div>
+              <div className="space-y-4 border-t border-slate-100 pt-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Symptom / 주요 고장 증상</label>
+                  <input type="text" required placeholder="예: Humidifier Failure / Power Error" value={serviceForm.symptom} onChange={e => setServiceForm({...serviceForm, symptom: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 font-semibold" />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Problem Description / 문제 상세 내역</label>
+                  <textarea 
+                    rows={6} 
+                    placeholder="고장 현상(Symptom)과 특이사항을 상세히 기재해 주세요.&#10;- 언제부터 발생했나요?&#10;- 특정 에러 코드(Error Code)가 있나요?&#10;- 기타 특이사항:" 
+                    value={serviceForm.problem_description} 
+                    onChange={e => setServiceForm({...serviceForm, problem_description: e.target.value})} 
+                    className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 resize-y leading-relaxed focus:border-blue-500 outline-none" 
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">* 엔터(Enter)로 줄바꿈이 가능하며, 우측 하단을 드래그하여 입력창 크기를 조절할 수 있습니다.</p>
+                </div>
 
-{/* --- 📷 사진/동영상 첨부 영역 --- */}
-              <div className="border-t border-slate-100 pt-4 mt-4">
-                <label className="block font-bold text-slate-700 mb-1.5">
-                  📷 증상 사진 및 동영상 첨부 (다중 선택 가능)
-                </label>
-                <input 
-                  type="file" 
-                  multiple 
-                  accept="image/*,video/*" 
-                  onChange={(e) => setAttachedFiles(Array.from(e.target.files || []))}
-                  className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border-2 border-dashed border-slate-200 p-2 rounded-xl"
-                />
-                {attachedFiles.length > 0 && (
-                  <div className="mt-2 text-xs text-blue-600 font-bold bg-blue-50 p-2 rounded-lg flex flex-wrap gap-2">
-                    <span>선택된 파일 {attachedFiles.length}개:</span>
-                    {attachedFiles.map((f, i) => (
-                      <span key={i} className="bg-white px-2 py-0.5 rounded border border-blue-200 text-slate-700">{f.name}</span>
-                    ))}
-                  </div>
-                )}
+                {/* 📷 사진/동영상 첨부 영역 */}
+                <div className="border-t border-slate-100 pt-4 mt-4">
+                  <label className="block font-bold text-slate-700 mb-1.5">
+                    📷 증상 사진 및 동영상 첨부 (다중 선택 가능)
+                  </label>
+                  <input 
+                    type="file" 
+                    multiple 
+                    accept="image/*,video/*" 
+                    onChange={(e) => setAttachedFiles(Array.from(e.target.files || []))}
+                    className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border-2 border-dashed border-slate-200 p-2 rounded-xl"
+                  />
+                  {attachedFiles.length > 0 && (
+                    <div className="mt-2 text-xs text-blue-600 font-bold bg-blue-50 p-2 rounded-lg flex flex-wrap gap-2">
+                      <span>선택된 파일 {attachedFiles.length}개:</span>
+                      {attachedFiles.map((f, i) => (
+                        <span key={i} className="bg-white px-2 py-0.5 rounded border border-blue-200 text-slate-700">{f.name}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-</div>
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setShowNewServiceModal(false)} className="px-6 py-3 bg-slate-100 font-bold rounded-xl text-slate-700">취소</button>
                 <button type="submit" className="px-8 py-3 bg-blue-600 hover:bg-blue-700 font-bold text-white rounded-xl shadow-lg">접수 등록</button>
@@ -1091,6 +1165,35 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
             {isEditingReport && (
               <form onSubmit={handleSaveReportProcessing} className="bg-amber-50 p-6 rounded-2xl border border-amber-200 mb-6 space-y-4 text-sm print:hidden">
                 <h4 className="font-black text-amber-900 text-base mb-2">🛠️ 서비스 수리 처리 및 검수 내역 입력</h4>
+                
+                {/* MSM 분류 코드 편집 드롭다운 */}
+                <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-amber-200">
+                  <div>
+                    <label className="block font-bold text-amber-900 mb-1">대표증상원인 (고장원인중분류)</label>
+                    <select 
+                      value={reportEditForm.cause_code} 
+                      onChange={e=>setReportEditForm({...reportEditForm, cause_code: e.target.value})} 
+                      className="w-full border rounded-lg p-2 font-bold bg-amber-50/50"
+                    >
+                      {CAUSE_CLASSIFICATIONS.map(c => (
+                        <option key={c.code} value={c.code}>[{c.code}] {c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-amber-900 mb-1">대표처리구분 (ASCODE)</label>
+                    <select 
+                      value={reportEditForm.action_code} 
+                      onChange={e=>setReportEditForm({...reportEditForm, action_code: e.target.value})} 
+                      className="w-full border rounded-lg p-2 font-bold bg-amber-50/50"
+                    >
+                      {ACTION_CLASSIFICATIONS.map(a => (
+                        <option key={a.code} value={a.code}>[{a.code}] {a.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block font-bold text-amber-900 mb-1">Reviewer / 검토자</label>
@@ -1109,27 +1212,27 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
                     <input type="number" value={reportEditForm.repair_cost} onChange={e=>setReportEditForm({...reportEditForm, repair_cost: Number(e.target.value)})} className="w-full border rounded-lg p-2 font-bold" />
                   </div>
                 </div>
-<div>
-  <label className="block font-bold text-amber-900 mb-1">Cause Analysis / 고장 원인 분석</label>
-  <textarea 
-    rows={3} 
-    placeholder="고장 원인을 상세히 기재하세요." 
-    value={reportEditForm.cause_analysis} 
-    onChange={e=>setReportEditForm({...reportEditForm, cause_analysis: e.target.value})} 
-    className="w-full border rounded-lg p-2 resize-y outline-none focus:ring-2 focus:ring-amber-200" 
-  />
-</div>
-<div>
-  <label className="block font-bold text-amber-900 mb-1">Repair Information / 상세 조치 및 수리 내용 (Service Report 메인)</label>
-  <textarea 
-    rows={8} 
-    placeholder="- 조치 내용 (Action Taken):&#10;- 교체 부품 (Replaced Parts):&#10;- 소프트웨어 버전 (SW Version):&#10;- 최종 점검 내역 (Final Inspection):" 
-    value={reportEditForm.repair_info} 
-    onChange={e=>setReportEditForm({...reportEditForm, repair_info: e.target.value})} 
-    className="w-full border rounded-lg p-3 resize-y outline-none focus:ring-2 focus:ring-amber-200 leading-relaxed font-mono text-sm" 
-  />
-  <p className="text-[11px] text-amber-700/60 mt-1">* 엔터(Enter)로 줄바꿈이 가능하며 작성된 형태 그대로 레포트(PDF)에 출력됩니다.</p>
-</div>
+
+                <div>
+                  <label className="block font-bold text-amber-900 mb-1">Cause Analysis / 고장 원인 분석</label>
+                  <textarea 
+                    rows={3} 
+                    placeholder="고장 원인을 상세히 기재하세요." 
+                    value={reportEditForm.cause_analysis} 
+                    onChange={e=>setReportEditForm({...reportEditForm, cause_analysis: e.target.value})} 
+                    className="w-full border rounded-lg p-2 resize-y outline-none focus:ring-2 focus:ring-amber-200" 
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-amber-900 mb-1">Repair Information / 상세 조치 및 수리 내용 (Service Report 메인)</label>
+                  <textarea 
+                    rows={8} 
+                    placeholder="- 조치 내용 (Action Taken):&#10;- 교체 부품 (Replaced Parts):&#10;- 소프트웨어 버전 (SW Version):&#10;- 최종 점검 내역 (Final Inspection):" 
+                    value={reportEditForm.repair_info} 
+                    onChange={e=>setReportEditForm({...reportEditForm, repair_info: e.target.value})} 
+                    className="w-full border rounded-lg p-3 resize-y outline-none focus:ring-2 focus:ring-amber-200 leading-relaxed font-mono text-sm" 
+                  />
+                </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <button type="submit" className="bg-amber-600 text-white font-bold px-6 py-2 rounded-lg text-xs shadow">수리 완료 및 레포트 저장</button>
                 </div>
@@ -1140,7 +1243,7 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
             <div className="p-8 border-2 border-slate-900 rounded-none bg-white text-slate-900 font-sans print:p-0 print:border-none">
               <div className="flex justify-between items-center border-b-2 border-slate-900 pb-4 mb-6">
                 <div>
-<img src="/MEKICS-Service-Portal/logo.png" alt="MEK Logo" className="h-8 w-auto mb-1 object-contain" />
+                  <img src="/MEKICS-Service-Portal/logo.png" alt="MEK Logo" className="h-8 w-auto mb-1 object-contain" />
                   <p className="text-[10px] font-bold tracking-wider uppercase text-slate-600">Intensive Care System</p>
                 </div>
                 <h2 className="text-2xl font-black tracking-wider text-slate-900">Service Report</h2>
@@ -1219,6 +1322,13 @@ const handleSubmitNewService = async (e: React.FormEvent) => {
                             <span>ETC</span>
                           </label>
                         </div>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-900">
+                      <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">MSM Code</td>
+                      <td colSpan={3} className="p-2 font-mono font-bold text-blue-900">
+                        대표증상원인: {CAUSE_CLASSIFICATIONS.find(x => x.code === reportModalCase.cause_code)?.label || reportModalCase.cause_code || '미분류'} [{reportModalCase.cause_code || 'X'}] | 
+                        대표처리구분: {ACTION_CLASSIFICATIONS.find(x => x.code === reportModalCase.action_code)?.label || reportModalCase.action_code || '미결정'} [{reportModalCase.action_code || 'PC00'}]
                       </td>
                     </tr>
                     <tr className="border-b border-slate-900">
