@@ -2,14 +2,17 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// 관리자 권한용 Supabase 클라이언트 생성 (service_role_key 사용)
+// 빌드 타임(GitHub Actions)에 환경변수가 없어 터지는 현상 방지 처리
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key';
+
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  supabaseUrl,
+  serviceRoleKey,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-// 0️⃣ 사용자 목록 가져오기 (app/admin/page.tsx 오류 해결용)
+// 0️⃣ 사용자 목록 가져오기
 export async function getUserList() {
   try {
     const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers();
@@ -21,7 +24,7 @@ export async function getUserList() {
   }
 }
 
-// 1️⃣ 신규 사용자 생성 (이메일 인증 자동 통과)
+// 1️⃣ 신규 사용자 생성
 export async function createUserAccount(email: string, password: string, fullName: string, accountType: string) {
   try {
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
@@ -54,7 +57,7 @@ export async function updateTeamMemberPassword(uid: string, newPassword: string)
   }
 }
 
-// 3️⃣ 사용자 이름(Display Name) 강제 변경
+// 3️⃣ 사용자 이름 강제 변경
 export async function updateTeamMemberName(uid: string, newName: string) {
   try {
     const { error } = await supabaseAdmin.auth.admin.updateUserById(uid, {
