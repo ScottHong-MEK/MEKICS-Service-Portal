@@ -1,7 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Supabase Admin 클라이언트를 동적으로 생성하는 함수
+// 재사용할 클라이언트 인스턴스 변수
+let supabaseAdminInstance: SupabaseClient | null = null;
+
 function getAdminClient() {
+  if (supabaseAdminInstance) return supabaseAdminInstance;
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const serviceRoleKey = 
     process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || 
@@ -9,12 +13,15 @@ function getAdminClient() {
     '';
 
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY 키가 로드되지 않았습니다.');
+    throw new Error('NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY 키가 설정되지 않았습니다.');
   }
 
-  return createClient(supabaseUrl, serviceRoleKey, {
+  // 단 한 번만 생성하여 메모리 재사용
+  supabaseAdminInstance = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+
+  return supabaseAdminInstance;
 }
 
 // 0️⃣ 사용자 목록 가져오기
