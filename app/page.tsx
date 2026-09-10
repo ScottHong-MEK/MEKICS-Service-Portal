@@ -4,15 +4,15 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import * as XLSX from 'xlsx'
 
-// 1. MSM 고장 원인 중분류 및 대표 처리 구분 매핑
+// 1. MSM 고장 원인 중분류 및 대표 처리 구분 매핑 (알파벳 순 정렬)
 const CAUSE_CLASSIFICATIONS = [
-  { code: 'A', label: '기타' },
+  { code: 'A', label: '기타' },
   { code: 'B', label: '사용자부주의' },
-  { code: 'C', label: '성능불만족' },
-  { code: 'D', label: '악세서리불량' },
-  { code: 'E', label: '증상재현안됨' },
+  { code: 'C', label: '성능불만족' },
+  { code: 'D', label: '악세서리불량' },
+  { code: 'E', label: '증상재현안됨' },
   { code: 'F', label: '원자재불량' },
-  { code: 'X', label: '미분류' },
+  { code: 'X', label: '미분류' },
 ]
 
 const ACTION_CLASSIFICATIONS = [
@@ -153,6 +153,12 @@ export default function Dashboard() {
   const [prodSearch, setProdSearch] = useState('')
   const [salesSearch, setSalesSearch] = useState('')
 
+  // 📅 매출이력 전용 검색/필터 상태
+  const [salesStartDate, setSalesStartDate] = useState('')
+  const [salesEndDate, setSalesEndDate] = useState('')
+  const [salesMarketFilter, setSalesMarketFilter] = useState<'all' | '국내' | '해외'>('all')
+  const [salesManagerFilter, setSalesManagerFilter] = useState('all')
+
   const [serialQuery, setSerialQuery] = useState('')
   const [searchResult, setSearchResult] = useState<any>(null)
   const [searchError, setSearchError] = useState(false)
@@ -191,7 +197,7 @@ export default function Dashboard() {
   const prodFileInputRef = useRef<HTMLInputElement>(null)
   const salesFileInputRef = useRef<HTMLInputElement>(null)
 
-  const currentYear = new Date().getFullYear().toString() // "2026"
+  const currentYear = new Date().getFullYear().toString()
 
   useEffect(() => {
     setIsMounted(true)
@@ -209,7 +215,7 @@ export default function Dashboard() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // --- 🔍 생산이력 및 매출현황 검색 필터링 ---
+  // --- 🔍 생산이력 검색 필터링 ---
   const filteredEquipments = equipments.filter((item: any) => {
     if (!prodSearch.trim()) return true
     const q = prodSearch.toLowerCase()
@@ -220,15 +226,68 @@ export default function Dashboard() {
     )
   })
 
+  // --- 🔍 매출이력 다중 필터링 (날짜, 시장구분, 담당자, 검색어) ---
   const filteredSalesRecords = salesRecords.filter((item: any) => {
-    if (!salesSearch.trim()) return true
-    const q = salesSearch.toLowerCase()
-    return (
-      (item.serial_number || '').toLowerCase().includes(q) ||
-      (item.customer_name || item.hospital_name || '').toLowerCase().includes(q) ||
-      (item.item_name || item.product_model || '').toLowerCase().includes(q)
-    )
+    // 1. 검색어 필터
+    if (salesSearch.trim()) {
+      const q = salesSearch.toLowerCase()
+      const matches = (
+        (item.serial_number || '').toLowerCase().includes(q) ||
+        (item.customer_name || item.hospital_name || '').toLowerCase().includes(q) ||
+        (item.item_name || item.product_model || '').toLowerCase().includes(q) ||
+        (item.manager || '').toLowerCase().includes(q)
+      )
+      if (!matches) return false
+    }
+
+    // 2. 날짜 필터 (시작일, 종료일)
+    if (salesStartDate && item.sales_date && item.sales_date < salesStartDate) return false
+    if (salesEndDate && item.sales_date && item.sales_date > salesEndDate) return false
+
+    // 3. 시장 구분 필터 (국내 / 해외)
+    if (salesMarketFilter !== 'all' && item.market_type !== salesMarketFilter) return false
+
+    // 4. 담당자 필터
+    if (salesManagerFilter !== 'all' && (item.manager || '미지정') !== salesManagerFilter) return false
+
+    return true
   })
+
+  // 매출 담당자 유니크 리스트
+  const managerList = Array.from(new Set(salesRecords.map(s => s.manager || '미지정'))).filter(Boolean)
+
+  // 선택된 매출 합계 금액 집계
+  const filteredSalesTotalAmount = filteredSalesRecords.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0)
+
+  // 📅 날짜 퀵 필터 설정 함수
+  const applyDatePreset = (preset: 'month' | 'q1' | 'q2' | 'q3' | 'q4' | 'year' | 'all') => {
+    const y = currentYear
+    if (preset === 'month') {
+      const now = new Date()
+      const m = String(now.getMonth() + 1).padStart(2, '0')
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+      setSalesStartDate(`${y}-${m}-01`)
+      setSalesEndDate(`${y}-${m}-${lastDay}`)
+    } else if (preset === 'q1') {
+      setSalesStartDate(`${y}-01-01`)
+      setSalesEndDate(`${y}-03-31`)
+    } else if (preset === 'q2') {
+      setSalesStartDate(`${y}-04-01`)
+      setSalesEndDate(`${y}-06-30`)
+    } else if (preset === 'q3') {
+      setSalesStartDate(`${y}-07-01`)
+      setSalesEndDate(`${y}-09-30`)
+    } else if (preset === 'q4') {
+      setSalesStartDate(`${y}-10-01`)
+      setSalesEndDate(`${y}-12-31`)
+    } else if (preset === 'year') {
+      setSalesStartDate(`${y}-01-01`)
+      setSalesEndDate(`${y}-12-31`)
+    } else if (preset === 'all') {
+      setSalesStartDate('')
+      setSalesEndDate('')
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -471,6 +530,7 @@ export default function Dashboard() {
           const idxItemCode = headers.indexOf('품목')
           const idxItemName = headers.indexOf('품목명')
           const idxBigo = headers.indexOf('비고')
+          const idxManager = headers.findIndex(h => h.includes('담당자') || h.includes('영업담당'))
 
           matrix.slice(hr + 1).forEach(row => {
             const lot = String((idxLot !== -1 ? row[idxLot] : row[7]) || '').trim()
@@ -483,6 +543,7 @@ export default function Dashboard() {
             const country = String(row[idxCountry !== -1 ? idxCountry : 27] || '대한민국')
             const itemCode = String(row[idxItemCode !== -1 ? idxItemCode : 4] || '')
             const itemName = String(row[idxItemName !== -1 ? idxItemName : 5] || '')
+            const manager = idxManager !== -1 ? String(row[idxManager] || '').trim() : '미지정'
             
             const itemType = getItemTypeByOrderCode(itemCode, String(row[idxBigo] || ''))
 
@@ -490,7 +551,7 @@ export default function Dashboard() {
               serial_number: lot, sales_date: rawDate, amount: isNaN(amt) ? 0 : amt,
               market_type: (country === '대한민국' || country === '한국') ? '국내' : '해외',
               item_type: itemType, customer_name: String(row[idxCust !== -1 ? idxCust : 26] || '미등록'), 
-              currency: country, item_name: itemName
+              currency: country, item_name: itemName, manager: manager || '미지정'
             })
           })
 
@@ -905,11 +966,11 @@ export default function Dashboard() {
 
           {/* 매출이력조회 */}
           {activeTab === 'sales' && (
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
-               <div className="flex justify-between items-center mb-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 animate-fade-in space-y-6">
+              <div className="flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <h3 className="text-xl font-black text-slate-800">전체 매출 전표 내역</h3>
-                  <span className="text-sm bg-blue-50 text-blue-700 px-4 py-1.5 rounded-lg font-bold border border-blue-100">총 {salesRecords.length}건</span>
+                  <span className="text-sm bg-blue-50 text-blue-700 px-4 py-1.5 rounded-lg font-bold border border-blue-100">조회 {filteredSalesRecords.length}건 / 전체 {salesRecords.length}건</span>
                 </div>
                 <input type="file" accept=".xlsx, .xls, .csv" ref={salesFileInputRef} onChange={(e) => handleFileUpload(e, 'sales')} className="hidden" />
                 <button onClick={() => salesFileInputRef.current?.click()} disabled={uploading} className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg transition shadow-sm flex items-center gap-2">
@@ -917,20 +978,101 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="mb-4 flex justify-end">
-                <input
-                  type="text"
-                  placeholder="🔍 시리얼 번호, 모델명, 거래처명 검색..."
-                  value={salesSearch}
-                  onChange={(e) => setSalesSearch(e.target.value)}
-                  className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm"
-                />
+              {/* 📅 상세 날짜 및 담당자/시장 다중 필터링 바 */}
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  
+                  {/* 날짜 범위 검색 */}
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                    <span>📅 매출 기간:</span>
+                    <input 
+                      type="date" 
+                      value={salesStartDate} 
+                      onChange={e => setSalesStartDate(e.target.value)}
+                      className="border border-slate-300 rounded-lg px-3 py-1.5 bg-white text-sm font-mono focus:border-blue-500 outline-none shadow-sm"
+                    />
+                    <span>~</span>
+                    <input 
+                      type="date" 
+                      value={salesEndDate} 
+                      onChange={e => setSalesEndDate(e.target.value)}
+                      className="border border-slate-300 rounded-lg px-3 py-1.5 bg-white text-sm font-mono focus:border-blue-500 outline-none shadow-sm"
+                    />
+                  </div>
+
+                  {/* 날짜 퀵 필터 버튼들 */}
+                  <div className="flex items-center gap-1.5 text-xs font-bold bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                    <button onClick={() => applyDatePreset('month')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">당월</button>
+                    <button onClick={() => applyDatePreset('q1')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">1분기</button>
+                    <button onClick={() => applyDatePreset('q2')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">2분기</button>
+                    <button onClick={() => applyDatePreset('q3')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">3분기</button>
+                    <button onClick={() => applyDatePreset('q4')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">4분기</button>
+                    <button onClick={() => applyDatePreset('year')} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-black">올해({currentYear})</button>
+                    <button onClick={() => applyDatePreset('all')} className="px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition">전체기간</button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-3">
+                  <div className="flex items-center gap-4">
+                    {/* 시장 구분 필터 */}
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                      <span>🌐 구분:</span>
+                      <select 
+                        value={salesMarketFilter} 
+                        onChange={e => setSalesMarketFilter(e.target.value as any)}
+                        className="border border-slate-300 rounded-lg px-3 py-1.5 bg-white text-sm font-bold focus:border-blue-500 outline-none shadow-sm"
+                      >
+                        <option value="all">전체 (국내+해외)</option>
+                        <option value="국내">국내</option>
+                        <option value="해외">해외</option>
+                      </select>
+                    </div>
+
+                    {/* 담당자 필터 */}
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                      <span>👤 담당자:</span>
+                      <select 
+                        value={salesManagerFilter} 
+                        onChange={e => setSalesManagerFilter(e.target.value)}
+                        className="border border-slate-300 rounded-lg px-3 py-1.5 bg-white text-sm font-bold focus:border-blue-500 outline-none shadow-sm"
+                      >
+                        <option value="all">전체 담당자</option>
+                        {managerList.map((m, i) => (
+                          <option key={i} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 통합 키워드 검색창 */}
+                  <input
+                    type="text"
+                    placeholder="🔍 시리얼 번호, 품목명, 거래처명 검색..."
+                    value={salesSearch}
+                    onChange={(e) => setSalesSearch(e.target.value)}
+                    className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm bg-white"
+                  />
+                </div>
               </div>
 
-              <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[700px] overflow-y-auto">
+              {/* 💵 선택 조건 필터 실시간 매출 합계 바 */}
+              <div className="bg-emerald-50 border border-emerald-200 px-6 py-3.5 rounded-xl flex justify-between items-center text-sm font-bold text-emerald-900">
+                <span>📊 조회 조건 합계 집계 ({filteredSalesRecords.length}건)</span>
+                <span className="text-xl font-black text-emerald-700">총 ₩{filteredSalesTotalAmount.toLocaleString()} 원</span>
+              </div>
+
+              <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[600px] overflow-y-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="sticky top-0 bg-slate-100 text-slate-700 shadow-sm z-10">
-                    <tr><th className="p-4">매출일자</th><th className="p-4">판매 시리얼</th><th className="p-4">품목명</th><th className="p-4">거래처명</th><th className="p-4">구분</th><th className="p-4 text-right">매출액 (KRW)</th></tr>
+                    <tr>
+                      <th className="p-4">매출일자</th>
+                      <th className="p-4">판매 시리얼</th>
+                      <th className="p-4">품목명</th>
+                      <th className="p-4">거래처명</th>
+                      <th className="p-4">담당자</th>
+                      <th className="p-4">구분</th>
+                      <th className="p-4 text-right">매출액 (KRW)</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {filteredSalesRecords.map((s, idx) => (
@@ -939,7 +1081,8 @@ export default function Dashboard() {
                         <td className="p-4 font-mono font-black text-blue-700">{s.serial_number}</td>
                         <td className="p-4 text-slate-700 font-medium truncate max-w-xs">{s.item_name || '-'}</td>
                         <td className="p-4 font-bold text-slate-800">{s.customer_name}</td>
-                        <td className="p-4"><span className={`px-3 py-1.5 rounded-lg text-xs font-black shadow-sm border ${s.item_type === '서비스' ? 'bg-amber-50 border-amber-200 text-amber-800' : s.item_type === '상품' ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>{s.item_type || '제품'}</span></td>
+                        <td className="p-4 text-slate-600 font-bold">{s.manager || '미지정'}</td>
+                        <td className="p-4"><span className={`px-3 py-1.5 rounded-lg text-xs font-black shadow-sm border ${s.item_type === '서비스' ? 'bg-amber-50 border-amber-200 text-amber-800' : s.item_type === '상품' ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>{s.item_type || '제품'} ({s.market_type || '국내'})</span></td>
                         <td className="p-4 text-right font-black text-slate-900 text-base">{Number(s.amount || 0).toLocaleString()}</td>
                       </tr>
                     ))}
