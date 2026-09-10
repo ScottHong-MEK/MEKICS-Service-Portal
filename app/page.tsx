@@ -167,6 +167,7 @@ export default function Dashboard() {
   const [loginPassword, setLoginPassword] = useState('')
   const [loginError, setLoginError] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
 
   const [activeTab, setActiveTab] = useState<'home' | 'production' | 'sales' | 'service' | 'warranty' | 'downloads'>('home')
 
@@ -244,9 +245,18 @@ export default function Dashboard() {
 
   const currentYear = new Date().getFullYear().toString()
 
-  useEffect(() => {
+useEffect(() => {
     setIsMounted(true)
     
+    // 브라우저에 저장된 로그인 정보 자동 복원
+    const savedEmail = localStorage.getItem('mek_saved_email')
+    const savedPassword = localStorage.getItem('mek_saved_password')
+    if (savedEmail && savedPassword) {
+      setLoginEmail(savedEmail)
+      setLoginPassword(savedPassword)
+      setRememberMe(true)
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session) loadAllData()
@@ -346,7 +356,7 @@ export default function Dashboard() {
     }
   }
 
-  const handleLogin = async (e: React.FormEvent) => {
+const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setAuthLoading(true)
     setLoginError('')
@@ -359,6 +369,14 @@ export default function Dashboard() {
     if (error) {
       setLoginError('로그인 실패: 이메일 또는 비밀번호를 확인해 주세요.')
     } else {
+      // 기억하기 체크 시 브라우저(localStorage)에 저장
+      if (rememberMe) {
+        localStorage.setItem('mek_saved_email', loginEmail)
+        localStorage.setItem('mek_saved_password', loginPassword)
+      } else {
+        localStorage.removeItem('mek_saved_email')
+        localStorage.removeItem('mek_saved_password')
+      }
       setSession(data.session)
       loadAllData()
     }
@@ -832,6 +850,19 @@ export default function Dashboard() {
                 onChange={(e) => setLoginPassword(e.target.value)} 
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500" 
               />
+            </div>
+
+{/* 🔑 로그인 정보 기억하기 체크박스 */}
+            <div className="flex items-center justify-between pt-1">
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300 font-medium">
+                <input 
+                  type="checkbox" 
+                  checked={rememberMe} 
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <span>로그인 정보 기억하기 (이메일 및 비밀번호)</span>
+              </label>
             </div>
 
             {loginError && (
