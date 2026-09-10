@@ -1,17 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { 
+  getUserList,
   createUserAccount, 
   updateTeamMemberPassword, 
   updateTeamMemberName,
   deleteTeamMember 
 } from '@/app/actions';
 
-export default function AdminClient({ users }: { users: User[] }) {
-  const [userList, setUserList] = useState<User[]>(users || []);
+export default function AdminClient() {
+  const [userList, setUserList] = useState<User[]>([]);
+  const [listError, setListError] = useState('');
   
   // 신규 계정 생성 폼 상태
   const [newEmail, setNewEmail] = useState('');
@@ -21,6 +23,21 @@ export default function AdminClient({ users }: { users: User[] }) {
   const [createMsg, setCreateMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // 🔄 접속 시 유저 목록 실시간 불러오기
+  const loadUsers = async () => {
+    setListError('');
+    const res = await getUserList();
+    if (res.success) {
+      setUserList(res.users);
+    } else {
+      setListError(res.message);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
   // 1️⃣ 신규 계정 생성 처리
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,9 +46,9 @@ export default function AdminClient({ users }: { users: User[] }) {
 
     const res = await createUserAccount(newEmail, newPassword, newName, newAccountType);
     
-    if (res.success && res.user) {
+    if (res.success) {
       setCreateMsg('✨ 계정이 성공적으로 생성되었습니다! (즉시 로그인 가능)');
-      setUserList([res.user, ...userList]);
+      loadUsers();
       setNewEmail(''); setNewPassword(''); setNewName('');
     } else {
       setCreateMsg(`❌ 계정 생성 실패: ${res.message || '오류 발생'}`);
@@ -64,10 +81,7 @@ export default function AdminClient({ users }: { users: User[] }) {
     const res = await updateTeamMemberName(userId, newName);
     if (res.success) {
       alert('이름이 성공적으로 변경되었습니다!');
-      // 화면에 즉시 반영 (새로고침 없이)
-      setUserList(userList.map(u => 
-        u.id === userId ? { ...u, user_metadata: { ...u.user_metadata, full_name: newName } } : u
-      ));
+      loadUsers();
     } else {
       alert(`이름 변경 실패: ${res.message}`);
     }
@@ -82,7 +96,7 @@ export default function AdminClient({ users }: { users: User[] }) {
     const res = await deleteTeamMember(userId);
     if (res.success) {
       alert('계정이 삭제되었습니다.');
-      setUserList(userList.filter(u => u.id !== userId));
+      loadUsers();
     } else {
       alert(`삭제 실패: ${res.message}`);
     }
@@ -169,7 +183,19 @@ export default function AdminClient({ users }: { users: User[] }) {
 
         {/* 👥 2. 전체 계정 목록 및 제어 버튼 */}
         <section className="bg-slate-800 p-6 rounded-2xl border border-slate-700 space-y-4 shadow-xl">
-          <h2 className="text-lg font-bold text-white mb-4">👥 가입자 계정 직접 제어 패널</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-bold text-white">👥 가입자 계정 직접 제어 패널</h2>
+            <button onClick={loadUsers} className="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg text-slate-200 transition font-bold">
+              🔄 목록 새로고침
+            </button>
+          </div>
+
+          {listError && (
+            <div className="bg-rose-950/80 border border-rose-800 text-rose-300 p-4 rounded-xl text-xs font-mono font-bold">
+              ⚠️ 유저 목록 조회 오류: {listError}
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-slate-900 text-slate-400 text-xs uppercase">
@@ -182,6 +208,13 @@ export default function AdminClient({ users }: { users: User[] }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
+                {userList.length === 0 && !listError && (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-slate-400 text-xs">
+                      가입된 계정을 불러오는 중입니다...
+                    </td>
+                  </tr>
+                )}
                 {userList.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-750 transition">
                     <td className="p-3 font-mono font-bold text-blue-300">{u.email}</td>

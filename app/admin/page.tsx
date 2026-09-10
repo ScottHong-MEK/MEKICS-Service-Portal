@@ -1,7 +1,7 @@
-import { getUserList } from '@/app/actions';
+'use client';
+
 import AdminClient from './AdminClient';
 
-export default async function AdminPage() {
-  const users = await getUserList();
-  return <AdminClient users={users} />;
+export default function AdminPage() {
+  return <AdminClient />;
 }
