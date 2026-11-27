@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import * as XLSX from 'xlsx'
 import { fetchAll, chunk } from './lib/fetchAll'
+import { useLang } from './lib/i18n'
 import { parseProductionHistory, type ProductionParseResult } from './lib/parsers/productionHistory'
 
 // 1. MSM 고장 원인 중분류 및 대표 처리 구분 매핑 (알파벳 순 정렬)
@@ -162,6 +163,7 @@ const getModelFromSN = (sn: string, originalModel?: string) => {
 }
 
 export default function Dashboard() {
+  const { t } = useLang()
   const [isMounted, setIsMounted] = useState(false)
   const [session, setSession] = useState<any>(null)
   
@@ -423,7 +425,7 @@ const handleLogin = async (e: React.FormEvent) => {
 
   const handleUploadDownloadSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!uploadingDownloadFile) return alert('업로드할 파일을 선택해 주세요.')
+    if (!uploadingDownloadFile) return alert(t("업로드할 파일을 선택해 주세요."))
 
     setUploading(true)
     const fileExt = uploadingDownloadFile.name.split('.').pop()
@@ -461,7 +463,7 @@ const handleLogin = async (e: React.FormEvent) => {
     }
     setDownloadFiles([dbData[0], ...downloadFiles])
 
-    alert('다운로드 자료가 성공적으로 등록되었습니다.')
+    alert(t("다운로드 자료가 성공적으로 등록되었습니다."))
     setShowUploadDownloadModal(false)
     setUploadingDownloadFile(null)
     setUploading(false)
@@ -499,7 +501,7 @@ const handleLogin = async (e: React.FormEvent) => {
 
   const handleSubmitNewService = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newServiceSn.trim()) return alert('시리얼 번호를 입력해주세요.')
+    if (!newServiceSn.trim()) return alert(t("시리얼 번호를 입력해주세요."))
     const caseNo = `CS-${Date.now().toString().slice(-6)}`
 
     setUploadingFiles(true)
@@ -577,7 +579,7 @@ const handleLogin = async (e: React.FormEvent) => {
     }).eq('id', reportModalCase.id)
 
     if (!error) {
-      alert('서비스 레포트 수리 내용이 저장되었습니다.')
+      alert(t("서비스 레포트 수리 내용이 저장되었습니다."))
       setIsEditingReport(false)
       loadAllData()
       setSelectedReportCase({
@@ -660,7 +662,7 @@ const handleLogin = async (e: React.FormEvent) => {
 
   // 생산이력 DB 저장 (대리점 → 장비 → 구성품 이력 순서)
   const saveProductionData = async (parsed: ProductionParseResult) => {
-    if (parsed.equipments.length === 0) { setUploading(false); return alert('유효한 생산 데이터가 없습니다.') }
+    if (parsed.equipments.length === 0) { setUploading(false); return alert(t("유효한 생산 데이터가 없습니다.")) }
 
     // (1) 대리점 등록 (새 코드만 추가, 기존 이름은 유지)
     if (parsed.dealers.length > 0) {
@@ -782,14 +784,14 @@ const handleLogin = async (e: React.FormEvent) => {
     reader.onload = async (evt) => {
       try {
         const matrix: any[][] = XLSX.utils.sheet_to_json(XLSX.read(evt.target?.result, { type: 'array' }).Sheets[XLSX.read(evt.target?.result, { type: 'array' }).SheetNames[0]], { header: 1 })
-        if (!matrix || matrix.length <= 1) { setUploading(false); return alert('파일 형식 오류.') }
+        if (!matrix || matrix.length <= 1) { setUploading(false); return alert(t("파일 형식 오류.")) }
 
         if (type === 'omega') {
           await saveProductionData(parseProductionHistory(matrix))
 
         } else {
           const hr = matrix.findIndex(r => r && (r.includes('LOT번호') || r.includes('매출일')))
-          if (hr === -1) { setUploading(false); return alert('매출 헤더를 찾을 수 없습니다.') }
+          if (hr === -1) { setUploading(false); return alert(t("매출 헤더를 찾을 수 없습니다.")) }
           
           const headers = matrix[hr].map(h => String(h || '').trim())
           const rawRows: any[] = []
@@ -827,7 +829,7 @@ const handleLogin = async (e: React.FormEvent) => {
             })
           })
 
-          if (rawRows.length === 0) { setUploading(false); return alert('유효한 매출 데이터가 없습니다.') }
+          if (rawRows.length === 0) { setUploading(false); return alert(t("유효한 매출 데이터가 없습니다.")) }
 
           // 중복 판정은 전체 매출 기준 (1,000건 제한 때문에 중복이 이중 합산되던 문제 방지)
           const allSales = await fetchAll((f, t) => supabase.from('sales_records').select('serial_number, sales_date, amount').order('id').range(f, t))
@@ -986,12 +988,12 @@ const handleLogin = async (e: React.FormEvent) => {
               <img src="/MEKICS-Service-Portal/logo.png" alt="MEK Logo" className="h-8 w-auto object-contain" />
             </div>
             <p className="text-lg font-black text-slate-100 tracking-wide">Global Service Portal Admin</p>
-            <p className="text-xs text-slate-400">포털 접속을 위해 관리자 계정으로 로그인하세요.</p>
+            <p className="text-xs text-slate-400">{t("포털 접속을 위해 관리자 계정으로 로그인하세요.")}</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4 text-sm">
             <div>
-              <label className="block text-slate-300 font-bold mb-1.5">이메일 주소</label>
+              <label className="block text-slate-300 font-bold mb-1.5">{t("이메일 주소")}</label>
               <input 
                 type="email" 
                 required
@@ -1002,7 +1004,7 @@ const handleLogin = async (e: React.FormEvent) => {
               />
             </div>
             <div>
-              <label className="block text-slate-300 font-bold mb-1.5">비밀번호</label>
+              <label className="block text-slate-300 font-bold mb-1.5">{t("비밀번호")}</label>
               <input 
                 type="password" 
                 required
@@ -1022,7 +1024,7 @@ const handleLogin = async (e: React.FormEvent) => {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
                 />
-                <span>이메일 기억하기</span>
+                <span>{t("이메일 기억하기")}</span>
               </label>
             </div>
 
@@ -1035,7 +1037,7 @@ const handleLogin = async (e: React.FormEvent) => {
               disabled={authLoading}
               className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-lg mt-2"
             >
-              {authLoading ? '로그인 처리 중...' : '관리자 로그인'}
+              {authLoading ? t("로그인 처리 중...") : t("관리자 로그인")}
             </button>
           </form>
 
@@ -1059,7 +1061,7 @@ const handleLogin = async (e: React.FormEvent) => {
           <div 
             onClick={() => { setActiveTab('home'); setSearchResult(null); }}
             className="bg-white px-4 py-2.5 rounded-xl inline-block shadow-md mb-3 cursor-pointer hover:opacity-90 transition"
-            title="메인 대시보드로 이동"
+            title={t("메인 대시보드로 이동")}
           >
             <img src="/MEKICS-Service-Portal/logo.png" alt="MEKICS Logo" className="h-7 w-auto object-contain" />
           </div>
@@ -1067,26 +1069,26 @@ const handleLogin = async (e: React.FormEvent) => {
           <p 
             onClick={() => { setActiveTab('home'); setSearchResult(null); }}
             className="text-base font-black text-white tracking-wide cursor-pointer hover:text-blue-400 transition"
-            title="메인 대시보드로 이동"
+            title={t("메인 대시보드로 이동")}
           >
             Global Service Portal
           </p>
           
           <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-3">
             <span className="bg-blue-600/30 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-500/30">
-              {session.user.email?.split('@')[0]} (관리자)
+              {session.user.email?.split('@')[0]} {' '}{t("(관리자)")}
             </span>
-            <button onClick={handleLogout} className="text-[11px] text-slate-400 hover:text-rose-300 underline font-medium">로그아웃</button>
+            <button onClick={handleLogout} className="text-[11px] text-slate-400 hover:text-rose-300 underline font-medium">{t("로그아웃")}</button>
           </div>
         </div>
 
         <nav className="flex-1 px-4 space-y-2">
-          <button onClick={() => { setActiveTab('home'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'home' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>📊 종합 대시보드</button>
-          <button onClick={() => { setActiveTab('production'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'production' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>🏭 생산이력조회</button>
-          <button onClick={() => { setActiveTab('sales'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'sales' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>💰 매출이력조회</button>
-          <button onClick={() => { setActiveTab('service'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'service' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>🛠️ 서비스 현황</button>
-          <button onClick={() => { setActiveTab('warranty'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'warranty' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>🔍 워런티 조회</button>
-          <button onClick={() => { setActiveTab('downloads'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'downloads' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>📥 다운로드 센터</button>
+          <button onClick={() => { setActiveTab('home'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'home' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>{t("📊 종합 대시보드")}</button>
+          <button onClick={() => { setActiveTab('production'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'production' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>{t("🏭 생산이력조회")}</button>
+          <button onClick={() => { setActiveTab('sales'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'sales' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>{t("💰 매출이력조회")}</button>
+          <button onClick={() => { setActiveTab('service'); setSearchResult(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'service' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>{t("🛠️ 서비스 현황")}</button>
+          <button onClick={() => { setActiveTab('warranty'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'warranty' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>{t("🔍 워런티 조회")}</button>
+          <button onClick={() => { setActiveTab('downloads'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${activeTab === 'downloads' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>{t("📥 다운로드 센터")}</button>
         </nav>
 
         <div className="p-6 text-xs text-slate-500 font-medium"><p>© 2026 MEKICS.</p><p>All rights reserved.</p></div>
@@ -1095,7 +1097,7 @@ const handleLogin = async (e: React.FormEvent) => {
       {/* 2. 메인 콘텐츠 영역 */}
       <div className="flex-1 ml-64 flex flex-col min-h-screen">
         <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-8 py-5 flex justify-between items-center print:hidden shadow-sm">
-          <h2 className="text-xl font-black text-slate-800">{pageTitles[activeTab]}</h2>
+          <h2 className="text-xl font-black text-slate-800">{t(pageTitles[activeTab])}</h2>
         </header>
 
         <main className="flex-1 p-8 space-y-8 print:p-0">
@@ -1108,36 +1110,36 @@ const handleLogin = async (e: React.FormEvent) => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">2026 누적 총 실적</p>
-                    <h3 className="text-2xl font-black text-blue-600">{totalActual.toFixed(2)} <span className="text-sm font-bold text-slate-600">억원</span></h3>
-                    <p className="text-[11px] font-semibold text-slate-400 mt-1">목표 달성률 {totalTarget ? Math.round((totalActual / totalTarget) * 100) : 0}%</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{t("2026 누적 총 실적")}</p>
+                    <h3 className="text-2xl font-black text-blue-600">{totalActual.toFixed(2)} <span className="text-sm font-bold text-slate-600">{t("억원")}</span></h3>
+                    <p className="text-[11px] font-semibold text-slate-400 mt-1">{t("목표 달성률")}{' '}{totalTarget ? Math.round((totalActual / totalTarget) * 100) : 0}%</p>
                   </div>
                   <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl font-bold">📊</div>
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">2026 서비스 파트 매출</p>
-                    <h3 className="text-2xl font-black text-emerald-600">₩{(totalServiceSalesAmt / 100000000).toFixed(2)} <span className="text-sm font-bold text-slate-600">억원</span></h3>
-                    <p className="text-[11px] font-semibold text-slate-400 mt-1">부품/유상 수리 합계</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{t("2026 서비스 파트 매출")}</p>
+                    <h3 className="text-2xl font-black text-emerald-600">₩{(totalServiceSalesAmt / 100000000).toFixed(2)} <span className="text-sm font-bold text-slate-600">{t("억원")}</span></h3>
+                    <p className="text-[11px] font-semibold text-slate-400 mt-1">{t("부품/유상 수리 합계")}</p>
                   </div>
                   <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl font-bold">💰</div>
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">총 A/S 접수 건수</p>
-                    <h3 className="text-2xl font-black text-rose-600">{allServiceCases.length} <span className="text-sm font-bold text-slate-600">건</span></h3>
-                    <p className="text-[11px] font-semibold text-slate-400 mt-1">완료 {allServiceCases.filter(c => c.status === 'Closed').length}건 / 진행중 {allServiceCases.filter(c => c.status !== 'Closed').length}건</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{t("총 A/S 접수 건수")}</p>
+                    <h3 className="text-2xl font-black text-rose-600">{allServiceCases.length} <span className="text-sm font-bold text-slate-600">{t("건")}</span></h3>
+                    <p className="text-[11px] font-semibold text-slate-400 mt-1">{t("완료")}{' '}{allServiceCases.filter(c => c.status === 'Closed').length}{t("건 / 진행중")}{' '}{allServiceCases.filter(c => c.status !== 'Closed').length}{t("건")}</p>
                   </div>
                   <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-2xl font-bold">🛠️</div>
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">등록 장비 (마스터 DB)</p>
-                    <h3 className="text-2xl font-black text-amber-600">{equipments.length} <span className="text-sm font-bold text-slate-600">대</span></h3>
-                    <p className="text-[11px] font-semibold text-slate-400 mt-1">글로벌 서비스 추적 등록</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{t("등록 장비 (마스터 DB)")}</p>
+                    <h3 className="text-2xl font-black text-amber-600">{equipments.length} <span className="text-sm font-bold text-slate-600">{t("대")}</span></h3>
+                    <p className="text-[11px] font-semibold text-slate-400 mt-1">{t("글로벌 서비스 추적 등록")}</p>
                   </div>
                   <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl font-bold">🏭</div>
                 </div>
@@ -1146,10 +1148,10 @@ const handleLogin = async (e: React.FormEvent) => {
               {/* 매출 현황 대시보드 차트 & 표 */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-200 pb-5 mb-6 gap-4">
-                  <h3 className="text-xl font-black text-slate-800">📊 2026년 부서별/지역별 매출 누적 실적 현황 <span className="text-sm font-bold text-slate-400 ml-2">(단위: 억원)</span></h3>
+                  <h3 className="text-xl font-black text-slate-800">{t("📊 2026년 부서별/지역별 매출 누적 실적 현황")}{' '}<span className="text-sm font-bold text-slate-400 ml-2">{t("(단위: 억원)")}</span></h3>
                   <div className="flex items-center gap-5 text-sm font-bold bg-slate-50 px-4 py-2 rounded-lg border border-slate-200">
-                    <div className="flex items-center gap-2"><span className="w-4 h-4 bg-blue-500 rounded shadow-sm"></span>목표</div>
-                    <div className="flex items-center gap-2"><span className="w-4 h-4 bg-rose-500 rounded shadow-sm"></span>실적</div>
+                    <div className="flex items-center gap-2"><span className="w-4 h-4 bg-blue-500 rounded shadow-sm"></span>{t("목표")}</div>
+                    <div className="flex items-center gap-2"><span className="w-4 h-4 bg-rose-500 rounded shadow-sm"></span>{t("실적")}</div>
                   </div>
                 </div>
                 <div className="w-full bg-white rounded-xl mb-8 overflow-x-auto">
@@ -1162,7 +1164,7 @@ const handleLogin = async (e: React.FormEvent) => {
                             <div className="w-10 md:w-14 bg-blue-500 rounded-t-md relative flex flex-col justify-end shadow-md" style={{ height: `${tHeight}%` }}><span className="absolute -top-7 w-full text-center text-xs font-black text-blue-600">{d.target.toFixed(2)}</span></div>
                             <div className="w-10 md:w-14 bg-rose-500 rounded-t-md relative flex flex-col justify-end shadow-md" style={{ height: `${aHeight}%` }}><span className="absolute -top-7 w-full text-center text-xs font-black text-rose-600">{d.actual.toFixed(2)}</span></div>
                           </div>
-                          <span className="text-sm font-bold text-slate-700 mt-5 whitespace-nowrap">{d.label}</span>
+                          <span className="text-sm font-bold text-slate-700 mt-5 whitespace-nowrap">{t(d.label)}</span>
                         </div>
                       )
                     })}
@@ -1172,16 +1174,16 @@ const handleLogin = async (e: React.FormEvent) => {
                   <table className="w-full text-center text-sm whitespace-nowrap">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-300">
-                        <th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>매출현황</th><th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>국내</th><th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>해외 대리점</th><th className="p-3 border-b border-r border-slate-300 font-bold text-slate-800" colSpan={3}>서비스</th><th className="p-3 border-b border-r border-slate-300 font-bold text-slate-800" colSpan={5}>전략 (지사/해외)</th><th className="p-4 font-bold text-slate-800" rowSpan={2}>총합계</th>
+                        <th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>{t("매출현황")}</th><th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>{t("국내")}</th><th className="p-4 border-r border-slate-300 font-bold text-slate-800" rowSpan={2}>{t("해외 대리점")}</th><th className="p-3 border-b border-r border-slate-300 font-bold text-slate-800" colSpan={3}>{t("서비스")}</th><th className="p-3 border-b border-r border-slate-300 font-bold text-slate-800" colSpan={5}>{t("전략 (지사/해외)")}</th><th className="p-4 font-bold text-slate-800" rowSpan={2}>{t("총합계")}</th>
                       </tr>
                       <tr className="bg-slate-50 border-b border-slate-300 text-xs">
-                        <th className="p-3 border-r border-slate-200 text-slate-600 font-bold">국내서비스</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">해외서비스</th><th className="p-3 border-r border-slate-300 bg-slate-100 text-slate-800 font-bold">서비스합계</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">CKD</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">지사-인도</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">지사-터키</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">일본</th><th className="p-3 border-r border-slate-300 text-slate-600 font-bold">미국</th>
+                        <th className="p-3 border-r border-slate-200 text-slate-600 font-bold">{t("국내서비스")}</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">{t("해외서비스")}</th><th className="p-3 border-r border-slate-300 bg-slate-100 text-slate-800 font-bold">{t("서비스합계")}</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">CKD</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">{t("지사-인도")}</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">{t("지사-터키")}</th><th className="p-3 border-r border-slate-200 text-slate-600 font-bold">{t("일본")}</th><th className="p-3 border-r border-slate-300 text-slate-600 font-bold">{t("미국")}</th>
                       </tr>
                     </thead>
                     <tbody className="font-medium text-slate-700">
-                      <tr className="border-b border-slate-200 bg-white"><td className="p-4 border-r border-slate-300 font-black text-slate-800">목표</td>{reportData.map((d, i) => <td key={i} className={`p-4 font-bold text-blue-700 ${d.isGroup ? 'bg-slate-50 border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{d.target.toFixed(2)}</td>)}<td className="p-4 font-black text-blue-800 bg-blue-50 text-base">{totalTarget.toFixed(2)}</td></tr>
-                      <tr className="border-b border-slate-200 bg-white"><td className="p-4 border-r border-slate-300 font-black text-slate-800">실적</td>{reportData.map((d, i) => <td key={i} className={`p-4 font-bold text-rose-600 ${d.isGroup ? 'bg-slate-50 border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{d.actual.toFixed(2)}</td>)}<td className="p-4 font-black text-rose-700 bg-rose-50 text-base">{totalActual.toFixed(2)}</td></tr>
-                      <tr className="bg-slate-50"><td className="p-4 border-r border-slate-300 font-black text-slate-800">달성%</td>{reportData.map((d, i) => { const pct = d.target ? Math.round((d.actual / d.target) * 100) : 0; return <td key={i} className={`p-4 font-black ${pct >= 100 ? 'text-blue-600' : 'text-slate-600'} ${d.isGroup ? 'border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{pct}%</td> })}<td className="p-4 font-black text-slate-800 bg-slate-200 text-base">{totalTarget ? Math.round((totalActual / totalTarget) * 100) : 0}%</td></tr>
+                      <tr className="border-b border-slate-200 bg-white"><td className="p-4 border-r border-slate-300 font-black text-slate-800">{t("목표")}</td>{reportData.map((d, i) => <td key={i} className={`p-4 font-bold text-blue-700 ${d.isGroup ? 'bg-slate-50 border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{d.target.toFixed(2)}</td>)}<td className="p-4 font-black text-blue-800 bg-blue-50 text-base">{totalTarget.toFixed(2)}</td></tr>
+                      <tr className="border-b border-slate-200 bg-white"><td className="p-4 border-r border-slate-300 font-black text-slate-800">{t("실적")}</td>{reportData.map((d, i) => <td key={i} className={`p-4 font-bold text-rose-600 ${d.isGroup ? 'bg-slate-50 border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{d.actual.toFixed(2)}</td>)}<td className="p-4 font-black text-rose-700 bg-rose-50 text-base">{totalActual.toFixed(2)}</td></tr>
+                      <tr className="bg-slate-50"><td className="p-4 border-r border-slate-300 font-black text-slate-800">{t("달성%")}</td>{reportData.map((d, i) => { const pct = d.target ? Math.round((d.actual / d.target) * 100) : 0; return <td key={i} className={`p-4 font-black ${pct >= 100 ? 'text-blue-600' : 'text-slate-600'} ${d.isGroup ? 'border-r-2 border-slate-300' : 'border-r border-slate-200'}`}>{pct}%</td> })}<td className="p-4 font-black text-slate-800 bg-slate-200 text-base">{totalTarget ? Math.round((totalActual / totalTarget) * 100) : 0}%</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -1192,14 +1194,14 @@ const handleLogin = async (e: React.FormEvent) => {
                 {/* 1. 우수 대리점 위젯 */}
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                   <div className="flex justify-between items-center mb-4">
-                    <h4 className="font-bold text-slate-800 flex items-center gap-2">🏆 부품/서비스 구매 우수 대리점 TOP 10</h4>
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2">{t("🏆 부품/서비스 구매 우수 대리점 TOP 10")}</h4>
                     <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
-                      <button onClick={() => setAgencyTab('domestic')} className={`px-3 py-1 rounded-md transition ${agencyTab === 'domestic' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>국내</button>
-                      <button onClick={() => setAgencyTab('overseas')} className={`px-3 py-1 rounded-md transition ${agencyTab === 'overseas' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>해외</button>
+                      <button onClick={() => setAgencyTab('domestic')} className={`px-3 py-1 rounded-md transition ${agencyTab === 'domestic' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>{t("국내")}</button>
+                      <button onClick={() => setAgencyTab('overseas')} className={`px-3 py-1 rounded-md transition ${agencyTab === 'overseas' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>{t("해외")}</button>
                     </div>
                   </div>
                   <div className="space-y-2.5">
-                    {currentAgencies.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p> : currentAgencies.slice(0, 5).map(([agency, amt], idx) => (
+                    {currentAgencies.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">{t("데이터가 없습니다.")}</p> : currentAgencies.slice(0, 5).map(([agency, amt], idx) => (
                       <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
                         <span onClick={() => { setAgencyModal({ name: agency, records: salesRecords.filter(s => s.customer_name === agency && (s.sales_date || '').startsWith(currentYear)) }) }} className="font-medium text-slate-700 truncate cursor-pointer hover:text-blue-600 hover:underline">
                           <span className="text-slate-400 font-bold mr-2">{idx+1}</span>{agency}
@@ -1213,21 +1215,21 @@ const handleLogin = async (e: React.FormEvent) => {
                 {/* 2. 주요 고장 증상 위젯 */}
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                   <div className="flex justify-between items-center mb-4">
-                    <h4 className="font-bold text-slate-800 flex items-center gap-2">🚨 주요 고장 증상 TOP 5</h4>
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2">{t("🚨 주요 고장 증상 TOP 5")}</h4>
                     <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
-                      <button onClick={() => setIssueTab('domestic')} className={`px-3 py-1 rounded-md transition ${issueTab === 'domestic' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>국내</button>
-                      <button onClick={() => setIssueTab('overseas')} className={`px-3 py-1 rounded-md transition ${issueTab === 'overseas' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>해외</button>
+                      <button onClick={() => setIssueTab('domestic')} className={`px-3 py-1 rounded-md transition ${issueTab === 'domestic' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>{t("국내")}</button>
+                      <button onClick={() => setIssueTab('overseas')} className={`px-3 py-1 rounded-md transition ${issueTab === 'overseas' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>{t("해외")}</button>
                     </div>
                   </div>
                   <div className="space-y-2.5">
-                    {currentIssues.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p> : currentIssues.map((issue, idx) => (
+                    {currentIssues.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">{t("데이터가 없습니다.")}</p> : currentIssues.map((issue, idx) => (
                       <div key={idx} className="flex justify-between items-center text-sm bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                         <div className="pr-2 truncate">
                           <span className="block text-xs font-black text-rose-500 mb-0.5">{issue.model}</span>
                           <span className="font-medium text-slate-700 truncate block text-xs">{issue.desc}</span>
                         </div>
                         <button onClick={() => setIssueCasesModal({ title: `${issue.model} - ${issue.desc}`, cases: issue.cases })} className="font-black text-slate-800 bg-white hover:bg-rose-50 hover:text-rose-600 px-2.5 py-1 rounded-lg border text-xs whitespace-nowrap">
-                          {issue.cases.length}건 🔍
+                          {issue.cases.length}{t("건 🔍")}
                         </button>
                       </div>
                     ))}
@@ -1243,14 +1245,15 @@ const handleLogin = async (e: React.FormEvent) => {
               {/* 상단 컨트롤 바 */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div>
-                  <h3 className="text-xl font-black text-slate-800 mb-1">📥 MEKICS 자료 및 소프트웨어 다운로드 센터</h3>
-                  <p className="text-xs text-slate-500">원하시는 폴더(1. Software Download / 2. Manual Download)를 선택하여 최신 펌웨어 및 기술 매뉴얼을 받으세요.</p>
+                  <h3 className="text-xl font-black text-slate-800 mb-1">{t("📥 MEKICS 자료 및 소프트웨어 다운로드 센터")}</h3>
+                  <p className="text-xs text-slate-500">{t("원하시는 폴더(1. Software Download / 2. Manual Download)를 선택하여 최신 펌웨어 및 기술 매뉴얼을 받으세요.")}</p>
                 </div>
                 <button 
                   onClick={() => setShowUploadDownloadModal(true)} 
                   className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition shadow flex items-center gap-2"
                 >
-                  📤 신규 SW / 자료 등록
+                  
+                  {t("📤 신규 SW / 자료 등록")}
                 </button>
               </div>
 
@@ -1265,7 +1268,7 @@ const handleLogin = async (e: React.FormEvent) => {
                   </div>
                   <div>
                     <h4 className="font-black text-base">1. Software Download</h4>
-                    <p className="text-xs opacity-75 mt-0.5">Boot, Main, Pneumatic 최신 펌웨어 패키지 (.zip)</p>
+                    <p className="text-xs opacity-75 mt-0.5">{t("Boot, Main, Pneumatic 최신 펌웨어 패키지 (.zip)")}</p>
                   </div>
                 </button>
 
@@ -1278,7 +1281,7 @@ const handleLogin = async (e: React.FormEvent) => {
                   </div>
                   <div>
                     <h4 className="font-black text-base">2. Manual Download</h4>
-                    <p className="text-xs opacity-75 mt-0.5">유저 매뉴얼, 서비스 매뉴얼, 퀵 가이드 (.pdf)</p>
+                    <p className="text-xs opacity-75 mt-0.5">{t("유저 매뉴얼, 서비스 매뉴얼, 퀵 가이드 (.pdf)")}</p>
                   </div>
                 </button>
               </div>
@@ -1287,13 +1290,14 @@ const handleLogin = async (e: React.FormEvent) => {
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-400">제품 필터:</span>
+                    <span className="text-xs font-bold text-slate-400">{t("제품 필터:")}</span>
                     <div className="flex flex-wrap gap-1.5">
                       <button 
                         onClick={() => setSelectedDownloadProduct('all')}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition border ${selectedDownloadProduct === 'all' ? 'bg-slate-800 text-white border-slate-800 shadow' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
                       >
-                        전체 보기
+                        
+                        {t("전체 보기")}
                       </button>
                       {DOWNLOAD_PRODUCTS.map(p => (
                         <button 
@@ -1309,7 +1313,7 @@ const handleLogin = async (e: React.FormEvent) => {
 
                   <input 
                     type="text" 
-                    placeholder="🔍 파일명, 버전, 설명 검색..." 
+                    placeholder={t("🔍 파일명, 버전, 설명 검색...")} 
                     value={downloadSearch}
                     onChange={e => setDownloadSearch(e.target.value)}
                     className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm bg-white"
@@ -1321,7 +1325,7 @@ const handleLogin = async (e: React.FormEvent) => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredDownloadFiles.length === 0 ? (
                   <div className="col-span-full bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 font-medium">
-                    {downloadSubTab === 'sw' ? '등록되거나 검색된 소프트웨어(.zip)가 없습니다.' : '등록되거나 검색된 매뉴얼(.pdf)이 없습니다.'}
+                    {downloadSubTab === 'sw' ? t("등록되거나 검색된 소프트웨어(.zip)가 없습니다.") : t("등록되거나 검색된 매뉴얼(.pdf)이 없습니다.")}
                   </div>
                 ) : (
                   filteredDownloadFiles.map((item) => (
@@ -1332,7 +1336,7 @@ const handleLogin = async (e: React.FormEvent) => {
                             {item.product}
                           </span>
                           <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${item.category === 'sw' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}>
-                            {item.type}
+                            {t(item.type)}
                           </span>
                         </div>
                         <h4 className="font-extrabold text-slate-800 text-base mb-1 truncate" title={item.file_name}>
@@ -1340,8 +1344,8 @@ const handleLogin = async (e: React.FormEvent) => {
                         </h4>
                         <p className="text-xs text-slate-500 mb-3 leading-relaxed">{item.description}</p>
                         <div className="text-xs text-slate-400 space-y-1 font-mono">
-                          <p>버전: <strong className="text-slate-700 font-bold">{item.version}</strong></p>
-                          <p>등록일: {item.release_date}</p>
+                          <p>{t("버전:")}{' '}<strong className="text-slate-700 font-bold">{item.version}</strong></p>
+                          <p>{t("등록일:")}{' '}{item.release_date}</p>
                         </div>
                       </div>
 
@@ -1350,7 +1354,7 @@ const handleLogin = async (e: React.FormEvent) => {
                         download
                         className={`w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition shadow-sm ${item.category === 'sw' ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
                       >
-                        {item.category === 'sw' ? '💾 펌웨어(.zip) 다운로드' : '📄 매뉴얼(.pdf) 다운로드'}
+                        {item.category === 'sw' ? t("💾 펌웨어(.zip) 다운로드") : t("📄 매뉴얼(.pdf) 다운로드")}
                       </a>
                     </div>
                   ))
@@ -1363,21 +1367,22 @@ const handleLogin = async (e: React.FormEvent) => {
           {activeTab === 'warranty' && (
             <div className="space-y-6 animate-fade-in">
               <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 print:hidden">
-                <h3 className="text-xl font-black text-slate-800 mb-4">장비 시리얼 번호 (SN) 통합 검색</h3>
+                <h3 className="text-xl font-black text-slate-800 mb-4">{t("장비 시리얼 번호 (SN) 통합 검색")}</h3>
                 <form onSubmit={handleSearch} className="flex gap-4">
                   <input 
                     type="text" 
-                    placeholder="예: HFT700UA1B0870 또는 MV2000ZA1D0073" 
+                    placeholder={t("예: HFT700UA1B0870 또는 MV2000ZA1D0073")} 
                     value={serialQuery} 
                     onChange={(e) => setSerialQuery(e.target.value)} 
                     className="flex-1 border-2 border-slate-200 bg-slate-50 rounded-xl px-5 py-4 focus:outline-none focus:border-blue-500 focus:bg-white text-lg font-mono uppercase transition-colors shadow-inner" 
                     autoFocus 
                   />
-                  <button type="submit" className="px-8 py-4 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow-lg whitespace-nowrap">조회하기</button>
+                  <button type="submit" className="px-8 py-4 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow-lg whitespace-nowrap">{t("조회하기")}</button>
                 </form>
                 {searchError && (
                   <div className="mt-4 bg-rose-50 border border-rose-200 text-rose-600 text-sm font-bold px-5 py-4 rounded-xl shadow-sm">
-                    ❌ 해당 시리얼 번호의 장비 정보를 찾을 수 없습니다.
+                    
+                    {t("❌ 해당 시리얼 번호의 장비 정보를 찾을 수 없습니다.")}
                   </div>
                 )}
               </div>
@@ -1386,59 +1391,59 @@ const handleLogin = async (e: React.FormEvent) => {
                 <section className="bg-white rounded-2xl shadow-xl border-2 border-blue-500 overflow-hidden relative animate-fade-in">
                   <div className="bg-blue-50 px-6 py-5 border-b border-blue-100 flex justify-between items-center">
                     <div>
-                      <span className="text-xs font-bold text-blue-600 tracking-wider uppercase">통합 라이프사이클 이력</span>
+                      <span className="text-xs font-bold text-blue-600 tracking-wider uppercase">{t("통합 라이프사이클 이력")}</span>
                       <div className="flex items-center gap-3 mt-1">
                         <h3 className="text-2xl font-black text-slate-800 font-mono">{searchResult.equipment.serial_number}</h3>
                         <span className="bg-blue-600 text-white text-xs px-3 py-1 rounded-full font-bold">{searchResult.equipment.model_name}</span>
                       </div>
                     </div>
-                    <button onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900 text-white text-xs px-4 py-2 rounded-lg font-bold transition print:hidden shadow-sm">📄 PDF 출력</button>
+                    <button onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900 text-white text-xs px-4 py-2 rounded-lg font-bold transition print:hidden shadow-sm">{t("📄 PDF 출력")}</button>
                   </div>
 
                   <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-sm space-y-3">
-                      <h4 className="font-extrabold text-slate-800 border-b pb-3 flex items-center gap-2">🏭 제조 스펙</h4>
-                      <p><span className="text-slate-500 w-20 inline-block">품목:</span> <span className="font-bold text-slate-800">{searchResult.equipment.item_name || '-'}</span></p>
-                      <p><span className="text-slate-500 w-20 inline-block">생산일자:</span> <span className="font-bold text-slate-800">{searchResult.equipment.manufacture_date || '-'}</span>{searchResult.equipment.receipt_type && <span className="ml-2 text-xs bg-slate-100 border px-1.5 py-0.5 rounded">{searchResult.equipment.receipt_type}</span>}</p>
-                      <p><span className="text-slate-500 w-20 inline-block">출고처:</span> <span className="font-bold text-blue-700">{searchResult.equipment.dealer_code ? `${dealers[searchResult.equipment.dealer_code] || ''} (${searchResult.equipment.dealer_code})` : '-'}</span></p>
-                      <p><span className="text-slate-500 w-20 inline-block">출고일:</span> <span className="font-bold text-slate-800">{searchResult.equipment.shipment_date || '-'}</span></p>
-                      <p><span className="text-slate-500 w-20 inline-block">펌웨어:</span> <span className="font-bold text-slate-800">{searchResult.equipment.sw_version || '-'}</span></p>
+                      <h4 className="font-extrabold text-slate-800 border-b pb-3 flex items-center gap-2">{t("🏭 제조 스펙")}</h4>
+                      <p><span className="text-slate-500 w-20 inline-block">{t("품목:")}</span> <span className="font-bold text-slate-800">{searchResult.equipment.item_name || '-'}</span></p>
+                      <p><span className="text-slate-500 w-20 inline-block">{t("생산일자:")}</span> <span className="font-bold text-slate-800">{searchResult.equipment.manufacture_date || '-'}</span>{searchResult.equipment.receipt_type && <span className="ml-2 text-xs bg-slate-100 border px-1.5 py-0.5 rounded">{searchResult.equipment.receipt_type}</span>}</p>
+                      <p><span className="text-slate-500 w-20 inline-block">{t("출고처:")}</span> <span className="font-bold text-blue-700">{searchResult.equipment.dealer_code ? `${dealers[searchResult.equipment.dealer_code] || ''} (${searchResult.equipment.dealer_code})` : '-'}</span></p>
+                      <p><span className="text-slate-500 w-20 inline-block">{t("출고일:")}</span> <span className="font-bold text-slate-800">{searchResult.equipment.shipment_date || '-'}</span></p>
+                      <p><span className="text-slate-500 w-20 inline-block">{t("펌웨어:")}</span> <span className="font-bold text-slate-800">{searchResult.equipment.sw_version || '-'}</span></p>
                       <p className="break-all"><span className="text-slate-500 w-20 inline-block">UDI:</span> <span className="font-mono text-xs text-slate-700">{searchResult.equipment.udi || '-'}</span></p>
                     </div>
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-sm space-y-3">
-                      <h4 className="font-extrabold text-slate-800 border-b pb-3 flex items-center gap-2">💰 판매 이력</h4>
-                      <p><span className="text-slate-500 w-20 inline-block">고객사:</span> <span className="font-bold text-blue-700">{searchResult.sales?.customer_name || '미등록'}</span></p>
-                      <p><span className="text-slate-500 w-20 inline-block">판매금액:</span> <span className="font-black text-emerald-600">₩{Number(searchResult.sales?.amount || 0).toLocaleString()}</span></p>
-                      <p><span className="text-slate-500 w-20 inline-block">매출구분:</span> <span className="font-bold text-slate-800">{searchResult.sales?.item_type || '제품'} ({searchResult.sales?.market_type || '국내'})</span></p>
+                      <h4 className="font-extrabold text-slate-800 border-b pb-3 flex items-center gap-2">{t("💰 판매 이력")}</h4>
+                      <p><span className="text-slate-500 w-20 inline-block">{t("고객사:")}</span> <span className="font-bold text-blue-700">{searchResult.sales?.customer_name || t("미등록")}</span></p>
+                      <p><span className="text-slate-500 w-20 inline-block">{t("판매금액:")}</span> <span className="font-black text-emerald-600">₩{Number(searchResult.sales?.amount || 0).toLocaleString()}</span></p>
+                      <p><span className="text-slate-500 w-20 inline-block">{t("매출구분:")}</span> <span className="font-bold text-slate-800">{searchResult.sales?.item_type || t("제품")} ({searchResult.sales?.market_type || t("국내")})</span></p>
                     </div>
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-sm flex flex-col justify-between">
                       <div>
-                        <h4 className="font-extrabold text-slate-800 border-b pb-3 mb-3 flex items-center gap-2">🛠️ A/S 현황</h4>
-                        <p><span className="text-slate-500">총 A/S 접수:</span> <span className="font-black text-rose-600 text-lg ml-2">{searchResult.serviceCases.length}</span>건</p>
+                        <h4 className="font-extrabold text-slate-800 border-b pb-3 mb-3 flex items-center gap-2">{t("🛠️ A/S 현황")}</h4>
+                        <p><span className="text-slate-500">{t("총 A/S 접수:")}</span> <span className="font-black text-rose-600 text-lg ml-2">{searchResult.serviceCases.length}</span>{t("건")}</p>
                       </div>
-                      <button onClick={() => { handleAutoFetchServiceInfo(searchResult.equipment.serial_number); setShowNewServiceModal(true); }} className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-3 rounded-xl transition shadow print:hidden">+ 신규 서비스 접수</button>
+                      <button onClick={() => { handleAutoFetchServiceInfo(searchResult.equipment.serial_number); setShowNewServiceModal(true); }} className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-3 rounded-xl transition shadow print:hidden">{t("+ 신규 서비스 접수")}</button>
                     </div>
                   </div>
                   
                   {searchResult.components?.length > 0 && (
                     <div className="px-6 pb-6 border-t border-slate-100 pt-4">
-                      <h4 className="text-sm font-bold text-slate-700 mb-3">🔧 구성품 (보드 / 모듈) 현황 <span className="text-xs font-medium text-slate-400 ml-2">회색 줄 = 교체되기 전 이력</span></h4>
+                      <h4 className="text-sm font-bold text-slate-700 mb-3">{t("🔧 구성품 (보드 / 모듈) 현황")}{' '}<span className="text-xs font-medium text-slate-400 ml-2">{t("회색 줄 = 교체되기 전 이력")}</span></h4>
                       <div className="overflow-x-auto border border-slate-200 rounded-xl">
                         <table className="w-full text-left text-xs whitespace-nowrap">
                           <thead className="bg-slate-100 text-slate-700">
-                            <tr><th className="p-2.5">구성품</th><th className="p-2.5">LOT</th><th className="p-2.5">HW</th><th className="p-2.5">SW</th><th className="p-2.5">DC HW / SW</th><th className="p-2.5">등록 경로</th><th className="p-2.5">등록일</th></tr>
+                            <tr><th className="p-2.5">{t("구성품")}</th><th className="p-2.5">LOT</th><th className="p-2.5">HW</th><th className="p-2.5">SW</th><th className="p-2.5">DC HW / SW</th><th className="p-2.5">{t("등록 경로")}</th><th className="p-2.5">{t("등록일")}</th></tr>
                           </thead>
                           <tbody>
                             {searchResult.components.map((c: any) => (
                               <tr key={c.id} className={`border-b border-slate-100 ${c.is_current ? 'text-slate-800' : 'text-slate-400 line-through decoration-slate-300'}`}>
                                 <td className="p-2.5 font-bold">{c.component}</td>
                                 <td className="p-2.5 font-mono">
-                                  <button type="button" onClick={() => { if (c.lot) { setTraceQuery(c.lot); setTraceComponent(c.component); setActiveTab('production') } }} className="hover:text-blue-600 hover:underline" title="이 LOT이 들어간 장비 역추적">{c.lot || '-'}</button>
+                                  <button type="button" onClick={() => { if (c.lot) { setTraceQuery(c.lot); setTraceComponent(c.component); setActiveTab('production') } }} className="hover:text-blue-600 hover:underline" title={t("이 LOT이 들어간 장비 역추적")}>{c.lot || '-'}</button>
                                 </td>
                                 <td className="p-2.5 font-mono">{c.hw_version || '-'}</td>
                                 <td className="p-2.5 font-mono">{c.sw_version || '-'}</td>
                                 <td className="p-2.5 font-mono">{[c.dc_hw_version, c.dc_sw_version].filter(Boolean).join(' / ') || '-'}</td>
-                                <td className="p-2.5">{c.source === 'service' ? <span className="text-amber-700 font-bold">서비스 교체</span> : '생산'}</td>
+                                <td className="p-2.5">{c.source === 'service' ? <span className="text-amber-700 font-bold">{t("서비스 교체")}</span> : t("생산")}</td>
                                 <td className="p-2.5 font-mono">{c.created_at?.slice(0, 10)}</td>
                               </tr>
                             ))}
@@ -1450,7 +1455,7 @@ const handleLogin = async (e: React.FormEvent) => {
 
                   {searchResult.serviceCases.length > 0 && (
                     <div className="px-6 pb-6 border-t border-slate-100 pt-4">
-                      <h4 className="text-sm font-bold text-slate-700 mb-3">최근 A/S 내역</h4>
+                      <h4 className="text-sm font-bold text-slate-700 mb-3">{t("최근 A/S 내역")}</h4>
                       <div className="space-y-2">
                         {searchResult.serviceCases.map((sc: any) => (
                           <div key={sc.id} className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex justify-between items-center text-sm shadow-sm">
@@ -1459,7 +1464,8 @@ const handleLogin = async (e: React.FormEvent) => {
                               <span className="text-slate-700 font-medium">{sc.symptom || sc.issue_description}</span>
                             </div>
                             <button onClick={() => setSelectedReportCase(sc)} className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm flex items-center gap-1">
-                              📄 레포트 보기/출력
+                              
+                              {t("📄 레포트 보기/출력")}
                             </button>
                           </div>
                         ))}
@@ -1476,39 +1482,39 @@ const handleLogin = async (e: React.FormEvent) => {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-3">
-                  <h3 className="text-xl font-black text-slate-800">생산/제조 마스터 DB</h3>
-                  <span className="text-sm bg-blue-50 text-blue-700 px-4 py-1.5 rounded-lg font-bold border border-blue-100">총 {equipments.length}대</span>
+                  <h3 className="text-xl font-black text-slate-800">{t("생산/제조 마스터 DB")}</h3>
+                  <span className="text-sm bg-blue-50 text-blue-700 px-4 py-1.5 rounded-lg font-bold border border-blue-100">{t("총")}{' '}{equipments.length}{t("대")}</span>
                 </div>
                 <input type="file" multiple accept=".xlsx, .xls, .csv" ref={prodFileInputRef} onChange={handleProductionUpload} className="hidden" />
                 <button onClick={() => prodFileInputRef.current?.click()} disabled={uploading} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg transition shadow-sm flex items-center gap-2">
-                  {uploading ? '저장 중...' : '🏭 생산이력 업로드 (여러 파일 가능)'}
+                  {uploading ? t("저장 중...") : t("🏭 생산이력 업로드 (여러 파일 가능)")}
                 </button>
               </div>
 
               {/* 🔎 LOT / 버전 역추적 */}
               <div className="mb-6 bg-amber-50/60 border border-amber-200 rounded-2xl p-5 space-y-4">
                 <div>
-                  <h4 className="font-black text-amber-900">🔎 LOT / HW·SW 버전 역추적</h4>
-                  <p className="text-xs text-amber-800/80 mt-1">특정 LOT이나 버전이 현재 장착된 장비를 찾습니다. (예: VF04-26C1-0100, 1.00.02B, 1.01.00R1) · 필드 액션 / 리콜 대상 파악용</p>
+                  <h4 className="font-black text-amber-900">{t("🔎 LOT / HW·SW 버전 역추적")}</h4>
+                  <p className="text-xs text-amber-800/80 mt-1">{t("특정 LOT이나 버전이 현재 장착된 장비를 찾습니다. (예: VF04-26C1-0100, 1.00.02B, 1.01.00R1) · 필드 액션 / 리콜 대상 파악용")}</p>
                 </div>
                 <form onSubmit={handleTrace} className="flex flex-wrap gap-2">
                   <select value={traceComponent} onChange={e => setTraceComponent(e.target.value)} className="border border-amber-300 rounded-xl px-3 py-2 text-sm font-bold bg-white">
-                    <option value="all">전체 구성품</option>
+                    <option value="all">{t("전체 구성품")}</option>
                     {['MAIN B/D', 'PNEUMATIC B/D', 'BLOWER', 'WIFI B/D', 'D/D POWER B/D', 'A/D POWER B/D (SMPS)', "Heater plate Ass'y", 'DC Fan', 'MM105 (Vent SpO2 Option)', 'Masimo SpO2']
                       .concat(traceComponent !== 'all' && !['MAIN B/D', 'PNEUMATIC B/D', 'BLOWER', 'WIFI B/D', 'D/D POWER B/D', 'A/D POWER B/D (SMPS)', "Heater plate Ass'y", 'DC Fan', 'MM105 (Vent SpO2 Option)', 'Masimo SpO2'].includes(traceComponent) ? [traceComponent] : [])
                       .map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                  <input value={traceQuery} onChange={e => setTraceQuery(e.target.value)} placeholder="LOT 또는 HW/SW 버전 입력" className="flex-1 min-w-[220px] border border-amber-300 rounded-xl px-4 py-2 text-sm font-mono bg-white" />
-                  <button type="submit" disabled={traceLoading} className="bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold px-5 py-2 rounded-xl">{traceLoading ? '조회 중...' : '역추적'}</button>
+                  <input value={traceQuery} onChange={e => setTraceQuery(e.target.value)} placeholder={t("LOT 또는 HW/SW 버전 입력")} className="flex-1 min-w-[220px] border border-amber-300 rounded-xl px-4 py-2 text-sm font-mono bg-white" />
+                  <button type="submit" disabled={traceLoading} className="bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold px-5 py-2 rounded-xl">{traceLoading ? t("조회 중...") : t("역추적")}</button>
                   {traceResults && traceResults.length > 0 && (
-                    <button type="button" onClick={exportTraceExcel} className="bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold px-4 py-2 rounded-xl">📄 엑셀</button>
+                    <button type="button" onClick={exportTraceExcel} className="bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold px-4 py-2 rounded-xl">{t("📄 엑셀")}</button>
                   )}
                 </form>
                 {traceResults && (
-                  traceResults.length === 0 ? <p className="text-sm text-slate-500">해당 조건의 장비가 없습니다.</p> : (
+                  traceResults.length === 0 ? <p className="text-sm text-slate-500">{t("해당 조건의 장비가 없습니다.")}</p> : (
                     <div className="space-y-3">
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <span className="bg-white border border-amber-300 rounded-lg px-3 py-1.5 font-black text-amber-900">총 {new Set(traceResults.map(r => r.serial_number)).size}대</span>
+                        <span className="bg-white border border-amber-300 rounded-lg px-3 py-1.5 font-black text-amber-900">{t("총")}{' '}{new Set(traceResults.map(r => r.serial_number)).size}{t("대")}</span>
                         {Object.entries(traceResults.reduce((acc: Record<string, Set<string>>, r: any) => {
                           const k = r.equipments?.dealer_code ? (dealers[r.equipments.dealer_code] || r.equipments.dealer_code) : '미출고 / 재고'
                           ;(acc[k] = acc[k] || new Set()).add(r.serial_number); return acc
@@ -1518,7 +1524,7 @@ const handleLogin = async (e: React.FormEvent) => {
                       </div>
                       <div className="overflow-x-auto border border-amber-200 rounded-xl max-h-[320px] overflow-y-auto bg-white">
                         <table className="w-full text-left text-xs whitespace-nowrap">
-                          <thead className="sticky top-0 bg-amber-100 text-amber-900"><tr><th className="p-2.5">SN</th><th className="p-2.5">모델</th><th className="p-2.5">구성품</th><th className="p-2.5">LOT</th><th className="p-2.5">HW</th><th className="p-2.5">SW</th><th className="p-2.5">출고처</th><th className="p-2.5">출고일</th></tr></thead>
+                          <thead className="sticky top-0 bg-amber-100 text-amber-900"><tr><th className="p-2.5">SN</th><th className="p-2.5">{t("모델")}</th><th className="p-2.5">{t("구성품")}</th><th className="p-2.5">LOT</th><th className="p-2.5">HW</th><th className="p-2.5">SW</th><th className="p-2.5">{t("출고처")}</th><th className="p-2.5">{t("출고일")}</th></tr></thead>
                           <tbody>
                             {traceResults.map((r: any, i: number) => (
                               <tr key={i} onClick={() => handleSearch(undefined, r.serial_number)} className="border-b border-slate-100 hover:bg-amber-50 cursor-pointer">
@@ -1543,7 +1549,7 @@ const handleLogin = async (e: React.FormEvent) => {
               <div className="mb-4 flex justify-end">
                 <input
                   type="text"
-                  placeholder="🔍 시리얼 번호, 모델명, 출고처 검색..."
+                  placeholder={t("🔍 시리얼 번호, 모델명, 출고처 검색...")}
                   value={prodSearch}
                   onChange={(e) => setProdSearch(e.target.value)}
                   className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm"
@@ -1553,7 +1559,7 @@ const handleLogin = async (e: React.FormEvent) => {
               <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[700px] overflow-y-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="sticky top-0 bg-slate-100 text-slate-700 shadow-sm z-10">
-                    <tr><th className="p-4">시리얼 번호</th><th className="p-4">모델명</th><th className="p-4">생산일자</th><th className="p-4">출고처</th><th className="p-4">출고일</th><th className="p-4">HW/SW 사양</th><th className="p-4">상태</th></tr>
+                    <tr><th className="p-4">{t("시리얼 번호")}</th><th className="p-4">{t("모델명")}</th><th className="p-4">{t("생산일자")}</th><th className="p-4">{t("출고처")}</th><th className="p-4">{t("출고일")}</th><th className="p-4">{t("HW/SW 사양")}</th><th className="p-4">{t("상태")}</th></tr>
                   </thead>
                   <tbody>
                     {filteredEquipments.map((eq) => (
@@ -1572,12 +1578,12 @@ const handleLogin = async (e: React.FormEvent) => {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 animate-fade-in space-y-6">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <h3 className="text-xl font-black text-slate-800">전체 매출 전표 내역</h3>
-                  <span className="text-sm bg-blue-50 text-blue-700 px-4 py-1.5 rounded-lg font-bold border border-blue-100">조회 {filteredSalesRecords.length}건 / 전체 {salesRecords.length}건</span>
+                  <h3 className="text-xl font-black text-slate-800">{t("전체 매출 전표 내역")}</h3>
+                  <span className="text-sm bg-blue-50 text-blue-700 px-4 py-1.5 rounded-lg font-bold border border-blue-100">{t("조회")}{' '}{filteredSalesRecords.length}{t("건 / 전체")}{' '}{salesRecords.length}{t("건")}</span>
                 </div>
                 <input type="file" accept=".xlsx, .xls, .csv" ref={salesFileInputRef} onChange={(e) => handleFileUpload(e, 'sales')} className="hidden" />
                 <button onClick={() => salesFileInputRef.current?.click()} disabled={uploading} className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg transition shadow-sm flex items-center gap-2">
-                  {uploading ? '저장 중...' : '💰 매출현황 업로드'}
+                  {uploading ? t("저장 중...") : t("💰 매출현황 업로드")}
                 </button>
               </div>
 
@@ -1585,7 +1591,7 @@ const handleLogin = async (e: React.FormEvent) => {
               <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                    <span>📅 매출 기간:</span>
+                    <span>{t("📅 매출 기간:")}</span>
                     <input 
                       type="date" 
                       value={salesStartDate} 
@@ -1602,39 +1608,39 @@ const handleLogin = async (e: React.FormEvent) => {
                   </div>
 
                   <div className="flex items-center gap-1.5 text-xs font-bold bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-                    <button onClick={() => applyDatePreset('month')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">당월</button>
-                    <button onClick={() => applyDatePreset('q1')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">1분기</button>
-                    <button onClick={() => applyDatePreset('q2')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">2분기</button>
-                    <button onClick={() => applyDatePreset('q3')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">3분기</button>
-                    <button onClick={() => applyDatePreset('q4')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">4분기</button>
-                    <button onClick={() => applyDatePreset('year')} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-black">올해({currentYear})</button>
-                    <button onClick={() => applyDatePreset('all')} className="px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition">전체기간</button>
+                    <button onClick={() => applyDatePreset('month')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">{t("당월")}</button>
+                    <button onClick={() => applyDatePreset('q1')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">{t("1분기")}</button>
+                    <button onClick={() => applyDatePreset('q2')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">{t("2분기")}</button>
+                    <button onClick={() => applyDatePreset('q3')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">{t("3분기")}</button>
+                    <button onClick={() => applyDatePreset('q4')} className="px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">{t("4분기")}</button>
+                    <button onClick={() => applyDatePreset('year')} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-black">{t("올해(")}{currentYear})</button>
+                    <button onClick={() => applyDatePreset('all')} className="px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition">{t("전체기간")}</button>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-3">
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                      <span>🌐 구분:</span>
+                      <span>{t("🌐 구분:")}</span>
                       <select 
                         value={salesMarketFilter} 
                         onChange={e => setSalesMarketFilter(e.target.value as any)}
                         className="border border-slate-300 rounded-lg px-3 py-1.5 bg-white text-sm font-bold focus:border-blue-500 outline-none shadow-sm"
                       >
-                        <option value="all">전체 (국내+해외)</option>
-                        <option value="국내">국내</option>
-                        <option value="해외">해외</option>
+                        <option value="all">{t("전체 (국내+해외)")}</option>
+                        <option value="국내">{t("국내")}</option>
+                        <option value="해외">{t("해외")}</option>
                       </select>
                     </div>
 
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                      <span>👤 담당자:</span>
+                      <span>{t("👤 담당자:")}</span>
                       <select 
                         value={salesManagerFilter} 
                         onChange={e => setSalesManagerFilter(e.target.value)}
                         className="border border-slate-300 rounded-lg px-3 py-1.5 bg-white text-sm font-bold focus:border-blue-500 outline-none shadow-sm"
                       >
-                        <option value="all">전체 담당자</option>
+                        <option value="all">{t("전체 담당자")}</option>
                         {managerList.map((m, i) => (
                           <option key={i} value={m}>{m}</option>
                         ))}
@@ -1644,7 +1650,7 @@ const handleLogin = async (e: React.FormEvent) => {
 
                   <input
                     type="text"
-                    placeholder="🔍 시리얼 번호, 품목명, 거래처명 검색..."
+                    placeholder={t("🔍 시리얼 번호, 품목명, 거래처명 검색...")}
                     value={salesSearch}
                     onChange={(e) => setSalesSearch(e.target.value)}
                     className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm bg-white"
@@ -1653,21 +1659,21 @@ const handleLogin = async (e: React.FormEvent) => {
               </div>
 
               <div className="bg-emerald-50 border border-emerald-200 px-6 py-3.5 rounded-xl flex justify-between items-center text-sm font-bold text-emerald-900">
-                <span>📊 조회 조건 합계 집계 ({filteredSalesRecords.length}건)</span>
-                <span className="text-xl font-black text-emerald-700">총 ₩{filteredSalesTotalAmount.toLocaleString()} 원</span>
+                <span>{t("📊 조회 조건 합계 집계 (")}{filteredSalesRecords.length}{t("건)")}</span>
+                <span className="text-xl font-black text-emerald-700">{t("총 ₩")}{filteredSalesTotalAmount.toLocaleString()} {' '}{t("원")}</span>
               </div>
 
               <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[600px] overflow-y-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="sticky top-0 bg-slate-100 text-slate-700 shadow-sm z-10">
                     <tr>
-                      <th className="p-4">매출일자</th>
-                      <th className="p-4">판매 시리얼</th>
-                      <th className="p-4">품목명</th>
-                      <th className="p-4">거래처명</th>
-                      <th className="p-4">담당자</th>
-                      <th className="p-4">구분</th>
-                      <th className="p-4 text-right">매출액 (KRW)</th>
+                      <th className="p-4">{t("매출일자")}</th>
+                      <th className="p-4">{t("판매 시리얼")}</th>
+                      <th className="p-4">{t("품목명")}</th>
+                      <th className="p-4">{t("거래처명")}</th>
+                      <th className="p-4">{t("담당자")}</th>
+                      <th className="p-4">{t("구분")}</th>
+                      <th className="p-4 text-right">{t("매출액 (KRW)")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1677,8 +1683,8 @@ const handleLogin = async (e: React.FormEvent) => {
                         <td className="p-4 font-mono font-black text-blue-700">{s.serial_number}</td>
                         <td className="p-4 text-slate-700 font-medium truncate max-w-xs">{s.item_name || '-'}</td>
                         <td className="p-4 font-bold text-slate-800">{s.customer_name}</td>
-                        <td className="p-4 text-slate-600 font-bold">{s.manager || '미지정'}</td>
-                        <td className="p-4"><span className={`px-3 py-1.5 rounded-lg text-xs font-black shadow-sm border ${s.item_type === '서비스' ? 'bg-amber-50 border-amber-200 text-amber-800' : s.item_type === '상품' ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>{s.item_type || '제품'} ({s.market_type || '국내'})</span></td>
+                        <td className="p-4 text-slate-600 font-bold">{s.manager || t("미지정")}</td>
+                        <td className="p-4"><span className={`px-3 py-1.5 rounded-lg text-xs font-black shadow-sm border ${s.item_type === '서비스' ? 'bg-amber-50 border-amber-200 text-amber-800' : s.item_type === '상품' ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>{s.item_type || t("제품")} ({s.market_type || t("국내")})</span></td>
                         <td className="p-4 text-right font-black text-slate-900 text-base">{Number(s.amount || 0).toLocaleString()}</td>
                       </tr>
                     ))}
@@ -1693,11 +1699,11 @@ const handleLogin = async (e: React.FormEvent) => {
             <div className="space-y-6 animate-fade-in">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-1">
-                  <h3 className="font-bold text-slate-500 mb-1">올해 서비스 파트 총 매출 ({currentYear}년)</h3>
+                  <h3 className="font-bold text-slate-500 mb-1">{t("올해 서비스 파트 총 매출 (")}{currentYear}{t("년)")}</h3>
                   <p className="text-3xl font-black text-blue-700 mb-6 border-b border-slate-100 pb-6">₩{totalServiceSalesAmt.toLocaleString()}</p>
-                  <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">🥇 많이 판매된 부품 TOP 10</h4>
+                  <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">{t("🥇 많이 판매된 부품 TOP 10")}</h4>
                   <div className="space-y-3">
-                    {top10Parts.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p> : top10Parts.map(([part, amt], idx) => (
+                    {top10Parts.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">{t("데이터가 없습니다.")}</p> : top10Parts.map(([part, amt], idx) => (
                       <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
                         <span className="font-medium text-slate-700 truncate pr-2"><span className="text-slate-400 font-bold mr-2">{idx+1}</span>{part}</span>
                         <span className="font-mono font-bold text-blue-600">₩{(amt/1000).toLocaleString(undefined, {maximumFractionDigits:0})}k</span>
@@ -1709,24 +1715,26 @@ const handleLogin = async (e: React.FormEvent) => {
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
                     <div className="flex justify-between items-center mb-4">
-                      <h4 className="font-bold text-slate-800 flex items-center gap-2">🏆 서비스/부품 구매 우수 대리점 TOP 10 <span className="text-xs text-blue-600 font-normal">({currentYear}년)</span></h4>
+                      <h4 className="font-bold text-slate-800 flex items-center gap-2">{t("🏆 서비스/부품 구매 우수 대리점 TOP 10")}{' '}<span className="text-xs text-blue-600 font-normal">({currentYear}{t("년)")}</span></h4>
                       <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
                         <button 
                           onClick={() => setAgencyTab('domestic')}
                           className={`px-3 py-1 rounded-md transition ${agencyTab === 'domestic' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
-                          국내
+                          
+                          {t("국내")}
                         </button>
                         <button 
                           onClick={() => setAgencyTab('overseas')}
                           className={`px-3 py-1 rounded-md transition ${agencyTab === 'overseas' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
-                          해외
+                          
+                          {t("해외")}
                         </button>
                       </div>
                     </div>
                     <div className="space-y-3">
-                      {currentAgencies.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p> : currentAgencies.map(([agency, amt], idx) => (
+                      {currentAgencies.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">{t("데이터가 없습니다.")}</p> : currentAgencies.map(([agency, amt], idx) => (
                         <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
                           <span 
                             onClick={() => {
@@ -1734,7 +1742,7 @@ const handleLogin = async (e: React.FormEvent) => {
                               setAgencyModal({ name: agency, records })
                             }}
                             className="font-medium text-slate-700 truncate pr-2 cursor-pointer hover:text-blue-600 hover:underline flex items-center gap-1"
-                            title="클릭하여 상세 매출 이력 보기"
+                            title={t("클릭하여 상세 매출 이력 보기")}
                           >
                             <span className="text-slate-400 font-bold mr-1">{idx+1}</span>
                             {agency}
@@ -1747,24 +1755,26 @@ const handleLogin = async (e: React.FormEvent) => {
 
                   <div>
                     <div className="flex justify-between items-center mb-4">
-                      <h4 className="font-bold text-slate-800 flex items-center gap-2">🚨 제품별 주요 고장 증상 TOP 5</h4>
+                      <h4 className="font-bold text-slate-800 flex items-center gap-2">{t("🚨 제품별 주요 고장 증상 TOP 5")}</h4>
                       <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
                         <button 
                           onClick={() => setIssueTab('domestic')}
                           className={`px-3 py-1 rounded-md transition ${issueTab === 'domestic' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
-                          국내
+                          
+                          {t("국내")}
                         </button>
                         <button 
                           onClick={() => setIssueTab('overseas')}
                           className={`px-3 py-1 rounded-md transition ${issueTab === 'overseas' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
-                          해외
+                          
+                          {t("해외")}
                         </button>
                       </div>
                     </div>
                     <div className="space-y-3">
-                      {currentIssues.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p> : currentIssues.map((issue, idx) => (
+                      {currentIssues.length === 0 ? <p className="text-sm text-slate-400 py-4 text-center">{t("데이터가 없습니다.")}</p> : currentIssues.map((issue, idx) => (
                         <div key={idx} className="flex justify-between items-center text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
                           <div className="pr-2 truncate">
                             <span className="block text-xs font-black text-rose-500 mb-0.5">{issue.model}</span>
@@ -1773,9 +1783,9 @@ const handleLogin = async (e: React.FormEvent) => {
                           <button 
                             onClick={() => setIssueCasesModal({ title: `${issue.model} - ${issue.desc}`, cases: issue.cases })}
                             className="font-black text-slate-800 bg-white hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 px-3 py-1 rounded-lg shadow-sm border border-slate-200 transition whitespace-nowrap text-xs flex items-center gap-1"
-                            title="클릭하여 접수 건 상세 보기"
+                            title={t("클릭하여 접수 건 상세 보기")}
                           >
-                            {issue.cases.length}건 🔍
+                            {issue.cases.length}{t("건 🔍")}
                           </button>
                         </div>
                       ))}
@@ -1787,22 +1797,24 @@ const handleLogin = async (e: React.FormEvent) => {
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <div className="flex justify-between items-center mb-6">
                   <div className="flex items-center gap-3">
-                    <h3 className="text-xl font-black text-slate-800">글로벌 서비스 A/S 현황</h3>
-                    <span className="text-sm bg-rose-50 text-rose-700 px-4 py-1.5 rounded-lg font-bold border border-rose-100">총 {allServiceCases.length}건</span>
+                    <h3 className="text-xl font-black text-slate-800">{t("글로벌 서비스 A/S 현황")}</h3>
+                    <span className="text-sm bg-rose-50 text-rose-700 px-4 py-1.5 rounded-lg font-bold border border-rose-100">{t("총")}{' '}{allServiceCases.length}{t("건")}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <button onClick={() => { setNewServiceSn(''); setAutoFetchedInfo({ hospital_name: '', product_model: '', isWarrantyIn: true }); setShowNewServiceModal(true); }} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg transition shadow-sm flex items-center gap-2">
-                      🛠️ 신규 서비스 접수
+                      
+                      {t("🛠️ 신규 서비스 접수")}
                     </button>
                     <button onClick={exportServiceExcel} className="bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold px-5 py-2.5 rounded-lg transition shadow-sm flex items-center gap-2">
-                      📄 ISO 심사용 엑셀 다운로드
+                      
+                      {t("📄 ISO 심사용 엑셀 다운로드")}
                     </button>
                   </div>
                 </div>
                 <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[500px] overflow-y-auto">
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead className="sticky top-0 bg-slate-100 text-slate-700 shadow-sm z-10">
-                      <tr><th className="p-4">접수번호</th><th className="p-4">시리얼 번호</th><th className="p-4">병원/대리점</th><th className="p-4">대표증상원인</th><th className="p-4">대표처리구분</th><th className="p-4">상태</th><th className="p-4">워런티 구분</th><th className="p-4">증상 및 요청사항</th><th className="p-4">레포트 출력</th></tr>
+                      <tr><th className="p-4">{t("접수번호")}</th><th className="p-4">{t("시리얼 번호")}</th><th className="p-4">{t("병원/대리점")}</th><th className="p-4">{t("대표증상원인")}</th><th className="p-4">{t("대표처리구분")}</th><th className="p-4">{t("상태")}</th><th className="p-4">{t("워런티 구분")}</th><th className="p-4">{t("증상 및 요청사항")}</th><th className="p-4">{t("레포트 출력")}</th></tr>
                     </thead>
                     <tbody>
                       {allServiceCases.map((sc) => {
@@ -1816,11 +1828,12 @@ const handleLogin = async (e: React.FormEvent) => {
                             <td className="p-4 font-medium text-slate-700"><span className="bg-slate-100 px-2.5 py-1 rounded text-xs border">{causeLabel}</span></td>
                             <td className="p-4 font-medium text-slate-700"><span className="bg-slate-100 px-2.5 py-1 rounded text-xs border">{actionLabel}</span></td>
                             <td className="p-4"><span className={`px-3 py-1 rounded-lg text-xs font-bold border shadow-sm ${sc.status==='Closed'?'bg-emerald-50 text-emerald-700 border-emerald-200':'bg-amber-50 text-amber-700 border-amber-200'}`}>{sc.status}</span></td>
-                            <td className="p-4"><span className={`px-2.5 py-1 rounded text-xs font-bold ${sc.classification==='warranty in'?'bg-blue-100 text-blue-800':'bg-slate-100 text-slate-700'}`}>{sc.classification==='warranty in'?'Warranty In (무상)':'Warranty Out (유상)'}</span></td>
+                            <td className="p-4"><span className={`px-2.5 py-1 rounded text-xs font-bold ${sc.classification==='warranty in'?'bg-blue-100 text-blue-800':'bg-slate-100 text-slate-700'}`}>{sc.classification==='warranty in'?t("Warranty In (무상)"):t("Warranty Out (유상)")}</span></td>
                             <td className="p-4 text-slate-800 font-medium truncate max-w-xs">{sc.symptom || sc.issue_description}</td>
                             <td className="p-4">
                               <button onClick={() => { setSelectedReportCase(sc); setReportEditForm({ reviewer: sc.reviewer||'Scott Hong', reviewer_date: sc.created_at?.slice(0,10)||new Date().toISOString().slice(0,10), classification: sc.classification||'warranty in', cause_code: sc.cause_code||'X', action_code: sc.action_code||'PC00', cause_analysis: sc.cause_analysis||'', repair_info: sc.repair_info||'', repair_period: sc.repair_period||'', repair_cost: sc.repair_cost||0, inspector: sc.inspector||'Scott Hong', processing_date: sc.processing_date||new Date().toISOString().slice(0,10) }); }} className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm flex items-center gap-1">
-                                📄 레포트 보기
+                                
+                                {t("📄 레포트 보기")}
                               </button>
                             </td>
                           </tr>
@@ -1840,14 +1853,14 @@ const handleLogin = async (e: React.FormEvent) => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-xl w-full p-8 shadow-2xl border border-slate-200">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
-              <h3 className="text-xl font-black text-slate-800">📤 신규 SW / 기술 자료 등록</h3>
+              <h3 className="text-xl font-black text-slate-800">{t("📤 신규 SW / 기술 자료 등록")}</h3>
               <button onClick={() => setShowUploadDownloadModal(false)} className="text-slate-400 hover:text-slate-700 text-2xl font-bold">✖</button>
             </div>
 
             <form onSubmit={handleUploadDownloadSubmit} className="space-y-4 text-sm">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">대상 제품 (Product)</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t("대상 제품 (Product)")}</label>
                   <select 
                     value={downloadUploadForm.product} 
                     onChange={e => setDownloadUploadForm({...downloadUploadForm, product: e.target.value})}
@@ -1859,7 +1872,7 @@ const handleLogin = async (e: React.FormEvent) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">카테고리</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t("카테고리")}</label>
                   <select 
                     value={downloadUploadForm.category} 
                     onChange={e => {
@@ -1872,33 +1885,33 @@ const handleLogin = async (e: React.FormEvent) => {
                     }}
                     className="w-full border border-slate-300 rounded-xl p-2.5 font-bold"
                   >
-                    <option value="sw">💻 소프트웨어 / 펌웨어 (.zip)</option>
-                    <option value="manual">📚 기술 문서 / 매뉴얼 (.pdf)</option>
+                    <option value="sw">{t("💻 소프트웨어 / 펌웨어 (.zip)")}</option>
+                    <option value="manual">{t("📚 기술 문서 / 매뉴얼 (.pdf)")}</option>
                   </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">세부 종류 (Type)</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t("세부 종류 (Type)")}</label>
                   <select 
                     value={downloadUploadForm.type} 
                     onChange={e => setDownloadUploadForm({...downloadUploadForm, type: e.target.value})}
                     className="w-full border border-slate-300 rounded-xl p-2.5 font-bold"
                   >
                     {downloadUploadForm.category === 'sw' ? (
-                      SW_TYPES.map(t => <option key={t} value={t}>{t}</option>)
+                      SW_TYPES.map(x => <option key={x} value={x}>{x}</option>)
                     ) : (
-                      MANUAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)
+                      MANUAL_TYPES.map(x => <option key={x} value={x}>{t(x)}</option>)
                     )}
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">버전 (Version / Rev)</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t("버전 (Version / Rev)")}</label>
                   <input 
                     type="text" 
                     required 
-                    placeholder="예: v1.05.00 또는 Rev.01" 
+                    placeholder={t("예: v1.05.00 또는 Rev.01")} 
                     value={downloadUploadForm.version} 
                     onChange={e => setDownloadUploadForm({...downloadUploadForm, version: e.target.value})}
                     className="w-full border border-slate-300 rounded-xl p-2.5 font-bold" 
@@ -1907,10 +1920,10 @@ const handleLogin = async (e: React.FormEvent) => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">설명 (Description)</label>
+                <label className="block font-bold text-slate-700 mb-1">{t("설명 (Description)")}</label>
                 <input 
                   type="text" 
-                  placeholder="예: HFT700 최신 유공압 모듈 개선 버전" 
+                  placeholder={t("예: HFT700 최신 유공압 모듈 개선 버전")} 
                   value={downloadUploadForm.description} 
                   onChange={e => setDownloadUploadForm({...downloadUploadForm, description: e.target.value})}
                   className="w-full border border-slate-300 rounded-xl p-2.5" 
@@ -1918,7 +1931,7 @@ const handleLogin = async (e: React.FormEvent) => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">파일 첨부 (.zip 또는 .pdf)</label>
+                <label className="block font-bold text-slate-700 mb-1">{t("파일 첨부 (.zip 또는 .pdf)")}</label>
                 <input 
                   type="file" 
                   required
@@ -1929,9 +1942,9 @@ const handleLogin = async (e: React.FormEvent) => {
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button type="button" onClick={() => setShowUploadDownloadModal(false)} className="px-5 py-2.5 bg-slate-100 font-bold rounded-xl text-slate-700">취소</button>
+                <button type="button" onClick={() => setShowUploadDownloadModal(false)} className="px-5 py-2.5 bg-slate-100 font-bold rounded-xl text-slate-700">{t("취소")}</button>
                 <button type="submit" disabled={uploading} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 font-bold text-white rounded-xl shadow">
-                  {uploading ? '업로드 중...' : '등록 완료'}
+                  {uploading ? t("업로드 중...") : t("등록 완료")}
                 </button>
               </div>
             </form>
@@ -1945,24 +1958,24 @@ const handleLogin = async (e: React.FormEvent) => {
           <div className="bg-white rounded-3xl max-w-3xl w-full p-8 shadow-2xl border border-slate-200 max-h-[85vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <div>
-                <h3 className="text-xl font-black text-slate-800">🏪 {agencyModal.name} - {currentYear}년 부품/서비스 매출 이력</h3>
-                <p className="text-xs text-slate-500 mt-1">총 {agencyModal.records.length}건의 매출 내역이 조회되었습니다.</p>
+                <h3 className="text-xl font-black text-slate-800">🏪 {agencyModal.name} - {currentYear}{t("년 부품/서비스 매출 이력")}</h3>
+                <p className="text-xs text-slate-500 mt-1">{t("총")}{' '}{agencyModal.records.length}{t("건의 매출 내역이 조회되었습니다.")}</p>
               </div>
               <button onClick={() => setAgencyModal(null)} className="text-slate-400 hover:text-slate-700 text-2xl font-bold">✖</button>
             </div>
 
             {agencyModal.records.length === 0 ? (
-              <p className="text-center text-slate-400 py-8 font-medium">올해 등록된 매출 내역이 없습니다.</p>
+              <p className="text-center text-slate-400 py-8 font-medium">{t("올해 등록된 매출 내역이 없습니다.")}</p>
             ) : (
               <div className="overflow-x-auto border border-slate-200 rounded-xl">
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="bg-slate-100 text-slate-700">
                     <tr>
-                      <th className="p-3">매출일자</th>
-                      <th className="p-3">시리얼 번호</th>
-                      <th className="p-3">품목명</th>
-                      <th className="p-3">구분</th>
-                      <th className="p-3 text-right">매출액 (KRW)</th>
+                      <th className="p-3">{t("매출일자")}</th>
+                      <th className="p-3">{t("시리얼 번호")}</th>
+                      <th className="p-3">{t("품목명")}</th>
+                      <th className="p-3">{t("구분")}</th>
+                      <th className="p-3 text-right">{t("매출액 (KRW)")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1971,7 +1984,7 @@ const handleLogin = async (e: React.FormEvent) => {
                         <td className="p-3 font-mono text-slate-600">{r.sales_date}</td>
                         <td className="p-3 font-mono font-bold text-blue-700">{r.serial_number}</td>
                         <td className="p-3 font-medium text-slate-800">{r.item_name || '-'}</td>
-                        <td className="p-3"><span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs border border-blue-200 font-bold">{r.item_type || '서비스'}</span></td>
+                        <td className="p-3"><span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs border border-blue-200 font-bold">{r.item_type || t("서비스")}</span></td>
                         <td className="p-3 text-right font-black text-slate-900">₩{Number(r.amount || 0).toLocaleString()}</td>
                       </tr>
                     ))}
@@ -1981,7 +1994,7 @@ const handleLogin = async (e: React.FormEvent) => {
             )}
 
             <div className="flex justify-end pt-6 border-t border-slate-100 mt-6">
-              <button onClick={() => setAgencyModal(null)} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow">닫기</button>
+              <button onClick={() => setAgencyModal(null)} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow">{t("닫기")}</button>
             </div>
           </div>
         </div>
@@ -1993,8 +2006,8 @@ const handleLogin = async (e: React.FormEvent) => {
           <div className="bg-white rounded-3xl max-w-4xl w-full p-8 shadow-2xl border border-slate-200 max-h-[85vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <div>
-                <h3 className="text-xl font-black text-slate-800">🚨 {issueCasesModal.title} (총 {issueCasesModal.cases.length}건)</h3>
-                <p className="text-xs text-slate-500 mt-1">해당 고장 증상으로 접수된 A/S 상세 건 목록입니다.</p>
+                <h3 className="text-xl font-black text-slate-800">🚨 {issueCasesModal.title} {' '}{t("(총")}{' '}{issueCasesModal.cases.length}{t("건)")}</h3>
+                <p className="text-xs text-slate-500 mt-1">{t("해당 고장 증상으로 접수된 A/S 상세 건 목록입니다.")}</p>
               </div>
               <button onClick={() => setIssueCasesModal(null)} className="text-slate-400 hover:text-slate-700 text-2xl font-bold">✖</button>
             </div>
@@ -2003,12 +2016,12 @@ const handleLogin = async (e: React.FormEvent) => {
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-slate-100 text-slate-700">
                   <tr>
-                    <th className="p-3">접수번호</th>
-                    <th className="p-3">시리얼 번호</th>
-                    <th className="p-3">병원/대리점</th>
-                    <th className="p-3">상태</th>
-                    <th className="p-3">증상 및 요청사항</th>
-                    <th className="p-3">레포트</th>
+                    <th className="p-3">{t("접수번호")}</th>
+                    <th className="p-3">{t("시리얼 번호")}</th>
+                    <th className="p-3">{t("병원/대리점")}</th>
+                    <th className="p-3">{t("상태")}</th>
+                    <th className="p-3">{t("증상 및 요청사항")}</th>
+                    <th className="p-3">{t("레포트")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2039,7 +2052,8 @@ const handleLogin = async (e: React.FormEvent) => {
                           }}
                           className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold px-2.5 py-1 rounded text-xs shadow-sm"
                         >
-                          📄 보기
+                          
+                          {t("📄 보기")}
                         </button>
                       </td>
                     </tr>
@@ -2049,7 +2063,7 @@ const handleLogin = async (e: React.FormEvent) => {
             </div>
 
             <div className="flex justify-end pt-6 border-t border-slate-100 mt-6">
-              <button onClick={() => setIssueCasesModal(null)} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow">닫기</button>
+              <button onClick={() => setIssueCasesModal(null)} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow">{t("닫기")}</button>
             </div>
           </div>
         </div>
@@ -2060,17 +2074,17 @@ const handleLogin = async (e: React.FormEvent) => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-8 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">🛠️ 신규 서비스 접수 (Service Request)</h3>
+              <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">{t("🛠️ 신규 서비스 접수 (Service Request)")}</h3>
               <button onClick={() => setShowNewServiceModal(false)} className="text-slate-400 hover:text-slate-700 text-2xl font-bold">✖</button>
             </div>
 
             <form onSubmit={handleSubmitNewService} className="space-y-6 text-sm">
               <div className="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 space-y-3">
-                <label className="block font-black text-blue-900">1. 장비 시리얼 번호 (Serial No.) 입력</label>
+                <label className="block font-black text-blue-900">{t("1. 장비 시리얼 번호 (Serial No.) 입력")}</label>
                 <input 
                   type="text" 
                   required
-                  placeholder="예: HFT700UA1B0870 또는 MV2000ZA1D0073" 
+                  placeholder={t("예: HFT700UA1B0870 또는 MV2000ZA1D0073")} 
                   value={newServiceSn} 
                   onChange={(e) => handleAutoFetchServiceInfo(e.target.value)} 
                   className="w-full border-2 border-blue-200 rounded-xl px-5 py-3 font-mono font-bold uppercase focus:border-blue-600 outline-none text-base"
@@ -2078,12 +2092,12 @@ const handleLogin = async (e: React.FormEvent) => {
                 
                 {newServiceSn.trim() && (
                   <div className="grid grid-cols-2 gap-3 text-xs bg-white p-4 rounded-xl border border-blue-200 mt-2">
-                    <div><span className="text-slate-500">조회 모델:</span> <strong className="text-slate-800">{autoFetchedInfo.product_model}</strong></div>
-                    <div><span className="text-slate-500">자동매칭 대리점:</span> <strong className="text-blue-700">{autoFetchedInfo.hospital_name}</strong></div>
+                    <div><span className="text-slate-500">{t("조회 모델:")}</span> <strong className="text-slate-800">{autoFetchedInfo.product_model}</strong></div>
+                    <div><span className="text-slate-500">{t("자동매칭 대리점:")}</span> <strong className="text-blue-700">{autoFetchedInfo.hospital_name}</strong></div>
                     <div className="col-span-2 pt-1 border-t flex items-center justify-between">
-                      <span className="text-slate-500">자동 워런티 판별:</span>
+                      <span className="text-slate-500">{t("자동 워런티 판별:")}</span>
                       <span className={`px-2.5 py-0.5 rounded font-black text-xs ${autoFetchedInfo.isWarrantyIn ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                        {autoFetchedInfo.isWarrantyIn ? '✓ Warranty In (무상보증 이내)' : '✕ Warranty Out (보증기간 경과/유상)'}
+                        {autoFetchedInfo.isWarrantyIn ? t("✓ Warranty In (무상보증 이내)") : t("✕ Warranty Out (보증기간 경과/유상)")}
                       </span>
                     </div>
                   </div>
@@ -2093,26 +2107,26 @@ const handleLogin = async (e: React.FormEvent) => {
               {/* MSM 표준 분류 항목 선택 */}
               <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
                 <div>
-                  <label className="block font-bold text-slate-800 mb-1">대표증상원인 (고장원인중분류)</label>
+                  <label className="block font-bold text-slate-800 mb-1">{t("대표증상원인 (고장원인중분류)")}</label>
                   <select 
                     value={serviceForm.cause_code} 
                     onChange={e => setServiceForm({...serviceForm, cause_code: e.target.value})} 
                     className="w-full border-2 border-slate-200 rounded-xl px-3 py-2 bg-white font-bold focus:border-blue-500 outline-none"
                   >
                     {CAUSE_CLASSIFICATIONS.map(c => (
-                      <option key={c.code} value={c.code}>[{c.code}] {c.label}</option>
+                      <option key={c.code} value={c.code}>[{c.code}] {t(c.label)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-800 mb-1">대표처리구분 (ASCODE)</label>
+                  <label className="block font-bold text-slate-800 mb-1">{t("대표처리구분 (ASCODE)")}</label>
                   <select 
                     value={serviceForm.action_code} 
                     onChange={e => setServiceForm({...serviceForm, action_code: e.target.value})} 
                     className="w-full border-2 border-slate-200 rounded-xl px-3 py-2 bg-white font-bold focus:border-blue-500 outline-none"
                   >
                     {ACTION_CLASSIFICATIONS.map(a => (
-                      <option key={a.code} value={a.code}>[{a.code}] {a.label}</option>
+                      <option key={a.code} value={a.code}>[{a.code}] {t(a.label)}</option>
                     ))}
                   </select>
                 </div>
@@ -2120,44 +2134,45 @@ const handleLogin = async (e: React.FormEvent) => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Name of Hospital / 고객사명</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t("Name of Hospital / 고객사명")}</label>
                   <input type="text" value={serviceForm.hospital_name} onChange={e => setServiceForm({...serviceForm, hospital_name: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 font-bold" />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Contact Person / 담당자</label>
-                  <input type="text" placeholder="예: Terry Wang" value={serviceForm.contact_person} onChange={e => setServiceForm({...serviceForm, contact_person: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5" />
+                  <label className="block font-bold text-slate-700 mb-1">{t("Contact Person / 담당자")}</label>
+                  <input type="text" placeholder={t("예: Terry Wang")} value={serviceForm.contact_person} onChange={e => setServiceForm({...serviceForm, contact_person: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5" />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Contact Phone / 연락처</label>
-                  <input type="text" placeholder="예: 010-0000-0000" value={serviceForm.contact_phone} onChange={e => setServiceForm({...serviceForm, contact_phone: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5" />
+                  <label className="block font-bold text-slate-700 mb-1">{t("Contact Phone / 연락처")}</label>
+                  <input type="text" placeholder={t("예: 010-0000-0000")} value={serviceForm.contact_phone} onChange={e => setServiceForm({...serviceForm, contact_phone: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5" />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">E-mail / 이메일</label>
-                  <input type="email" placeholder="예: Terry.wang@symbiomed.com" value={serviceForm.email} onChange={e => setServiceForm({...serviceForm, email: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5" />
+                  <label className="block font-bold text-slate-700 mb-1">{t("E-mail / 이메일")}</label>
+                  <input type="email" placeholder={t("예: Terry.wang@symbiomed.com")} value={serviceForm.email} onChange={e => setServiceForm({...serviceForm, email: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5" />
                 </div>
               </div>
 
               <div className="space-y-4 border-t border-slate-100 pt-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Symptom / 주요 고장 증상</label>
-                  <input type="text" required placeholder="예: Humidifier Failure / Power Error" value={serviceForm.symptom} onChange={e => setServiceForm({...serviceForm, symptom: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 font-semibold" />
+                  <label className="block font-bold text-slate-700 mb-1">{t("Symptom / 주요 고장 증상")}</label>
+                  <input type="text" required placeholder={t("예: Humidifier Failure / Power Error")} value={serviceForm.symptom} onChange={e => setServiceForm({...serviceForm, symptom: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 font-semibold" />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Problem Description / 문제 상세 내역</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t("Problem Description / 문제 상세 내역")}</label>
                   <textarea 
                     rows={6} 
-                    placeholder="고장 현상(Symptom)과 특이사항을 상세히 기재해 주세요.&#10;- 언제부터 발생했나요?&#10;- 특정 에러 코드(Error Code)가 있나요?&#10;- 기타 특이사항:" 
+                    placeholder={t("고장 현상(Symptom)과 특이사항을 상세히 기재해 주세요.\n- 언제부터 발생했나요?\n- 특정 에러 코드(Error Code)가 있나요?\n- 기타 특이사항:")} 
                     value={serviceForm.problem_description} 
                     onChange={e => setServiceForm({...serviceForm, problem_description: e.target.value})} 
                     className="w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 resize-y leading-relaxed focus:border-blue-500 outline-none" 
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">* 엔터(Enter)로 줄바꿈이 가능하며, 우측 하단을 드래그하여 입력창 크기를 조절할 수 있습니다.</p>
+                  <p className="text-[11px] text-slate-400 mt-1">{t("* 엔터(Enter)로 줄바꿈이 가능하며, 우측 하단을 드래그하여 입력창 크기를 조절할 수 있습니다.")}</p>
                 </div>
 
                 {/* 📷 사진/동영상 첨부 영역 */}
                 <div className="border-t border-slate-100 pt-4 mt-4">
                   <label className="block font-bold text-slate-700 mb-1.5">
-                    📷 증상 사진 및 동영상 첨부 (다중 선택 가능)
+                    
+                    {t("📷 증상 사진 및 동영상 첨부 (다중 선택 가능)")}
                   </label>
                   <input 
                     type="file" 
@@ -2168,7 +2183,7 @@ const handleLogin = async (e: React.FormEvent) => {
                   />
                   {attachedFiles.length > 0 && (
                     <div className="mt-2 text-xs text-blue-600 font-bold bg-blue-50 p-2 rounded-lg flex flex-wrap gap-2">
-                      <span>선택된 파일 {attachedFiles.length}개:</span>
+                      <span>{t("선택된 파일")}{' '}{attachedFiles.length}{t("개:")}</span>
                       {attachedFiles.map((f, i) => (
                         <span key={i} className="bg-white px-2 py-0.5 rounded border border-blue-200 text-slate-700">{f.name}</span>
                       ))}
@@ -2178,8 +2193,8 @@ const handleLogin = async (e: React.FormEvent) => {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button type="button" onClick={() => setShowNewServiceModal(false)} className="px-6 py-3 bg-slate-100 font-bold rounded-xl text-slate-700">취소</button>
-                <button type="submit" className="px-8 py-3 bg-blue-600 hover:bg-blue-700 font-bold text-white rounded-xl shadow-lg">접수 등록</button>
+                <button type="button" onClick={() => setShowNewServiceModal(false)} className="px-6 py-3 bg-slate-100 font-bold rounded-xl text-slate-700">{t("취소")}</button>
+                <button type="submit" className="px-8 py-3 bg-blue-600 hover:bg-blue-700 font-bold text-white rounded-xl shadow-lg">{t("접수 등록")}</button>
               </div>
             </form>
           </div>
@@ -2198,10 +2213,11 @@ const handleLogin = async (e: React.FormEvent) => {
               </div>
               <div className="flex items-center gap-3">
                 <button onClick={() => setIsEditingReport(!isEditingReport)} className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-lg text-xs transition">
-                  {isEditingReport ? '수리 편집 취소' : '✏️ 수리/완료 내역 입력'}
+                  {isEditingReport ? t("수리 편집 취소") : t("✏️ 수리/완료 내역 입력")}
                 </button>
                 <button onClick={() => window.print()} className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-5 py-2 rounded-lg text-xs transition shadow-md">
-                  🖨️ 레포트 인쇄 / PDF 출력
+                  
+                  {t("🖨️ 레포트 인쇄 / PDF 출력")}
                 </button>
                 <button onClick={() => { setSelectedReportCase(null); setIsEditingReport(false); }} className="text-slate-400 hover:text-slate-700 text-2xl font-bold ml-2">✖</button>
               </div>
@@ -2209,31 +2225,31 @@ const handleLogin = async (e: React.FormEvent) => {
 
             {isEditingReport && (
               <form onSubmit={handleSaveReportProcessing} className="bg-amber-50 p-6 rounded-2xl border border-amber-200 mb-6 space-y-4 text-sm print:hidden">
-                <h4 className="font-black text-amber-900 text-base mb-2">🛠️ 서비스 수리 처리 및 검수 내역 입력</h4>
+                <h4 className="font-black text-amber-900 text-base mb-2">{t("🛠️ 서비스 수리 처리 및 검수 내역 입력")}</h4>
                 
                 {/* MSM 분류 코드 편집 드롭다운 */}
                 <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-amber-200">
                   <div>
-                    <label className="block font-bold text-amber-900 mb-1">대표증상원인 (고장원인중분류)</label>
+                    <label className="block font-bold text-amber-900 mb-1">{t("대표증상원인 (고장원인중분류)")}</label>
                     <select 
                       value={reportEditForm.cause_code} 
                       onChange={e=>setReportEditForm({...reportEditForm, cause_code: e.target.value})} 
                       className="w-full border rounded-lg p-2 font-bold bg-amber-50/50"
                     >
                       {CAUSE_CLASSIFICATIONS.map(c => (
-                        <option key={c.code} value={c.code}>[{c.code}] {c.label}</option>
+                        <option key={c.code} value={c.code}>[{c.code}] {t(c.label)}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block font-bold text-amber-900 mb-1">대표처리구분 (ASCODE)</label>
+                    <label className="block font-bold text-amber-900 mb-1">{t("대표처리구분 (ASCODE)")}</label>
                     <select 
                       value={reportEditForm.action_code} 
                       onChange={e=>setReportEditForm({...reportEditForm, action_code: e.target.value})} 
                       className="w-full border rounded-lg p-2 font-bold bg-amber-50/50"
                     >
                       {ACTION_CLASSIFICATIONS.map(a => (
-                        <option key={a.code} value={a.code}>[{a.code}] {a.label}</option>
+                        <option key={a.code} value={a.code}>[{a.code}] {t(a.label)}</option>
                       ))}
                     </select>
                   </div>
@@ -2241,45 +2257,45 @@ const handleLogin = async (e: React.FormEvent) => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block font-bold text-amber-900 mb-1">Reviewer / 검토자</label>
+                    <label className="block font-bold text-amber-900 mb-1">{t("Reviewer / 검토자")}</label>
                     <input type="text" value={reportEditForm.reviewer} onChange={e=>setReportEditForm({...reportEditForm, reviewer: e.target.value})} className="w-full border rounded-lg p-2 font-bold" />
                   </div>
                   <div>
-                    <label className="block font-bold text-amber-900 mb-1">Inspector / 최종검수자</label>
+                    <label className="block font-bold text-amber-900 mb-1">{t("Inspector / 최종검수자")}</label>
                     <input type="text" value={reportEditForm.inspector} onChange={e=>setReportEditForm({...reportEditForm, inspector: e.target.value})} className="w-full border rounded-lg p-2 font-bold" />
                   </div>
                   <div>
-                    <label className="block font-bold text-amber-900 mb-1">Repair Period / 수리 기간</label>
-                    <input type="text" placeholder="예: 2026.07.16 ~ 2026.08.10" value={reportEditForm.repair_period} onChange={e=>setReportEditForm({...reportEditForm, repair_period: e.target.value})} className="w-full border rounded-lg p-2 font-mono" />
+                    <label className="block font-bold text-amber-900 mb-1">{t("Repair Period / 수리 기간")}</label>
+                    <input type="text" placeholder={t("예: 2026.07.16 ~ 2026.08.10")} value={reportEditForm.repair_period} onChange={e=>setReportEditForm({...reportEditForm, repair_period: e.target.value})} className="w-full border rounded-lg p-2 font-mono" />
                   </div>
                   <div>
-                    <label className="block font-bold text-amber-900 mb-1">Repair Cost / 수리비 (KRW)</label>
+                    <label className="block font-bold text-amber-900 mb-1">{t("Repair Cost / 수리비 (KRW)")}</label>
                     <input type="number" value={reportEditForm.repair_cost} onChange={e=>setReportEditForm({...reportEditForm, repair_cost: Number(e.target.value)})} className="w-full border rounded-lg p-2 font-bold" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-amber-900 mb-1">Cause Analysis / 고장 원인 분석</label>
+                  <label className="block font-bold text-amber-900 mb-1">{t("Cause Analysis / 고장 원인 분석")}</label>
                   <textarea 
                     rows={3} 
-                    placeholder="고장 원인을 상세히 기재하세요." 
+                    placeholder={t("고장 원인을 상세히 기재하세요.")} 
                     value={reportEditForm.cause_analysis} 
                     onChange={e=>setReportEditForm({...reportEditForm, cause_analysis: e.target.value})} 
                     className="w-full border rounded-lg p-2 resize-y outline-none focus:ring-2 focus:ring-amber-200" 
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-amber-900 mb-1">Repair Information / 상세 조치 및 수리 내용 (Service Report 메인)</label>
+                  <label className="block font-bold text-amber-900 mb-1">{t("Repair Information / 상세 조치 및 수리 내용 (Service Report 메인)")}</label>
                   <textarea 
                     rows={8} 
-                    placeholder="- 조치 내용 (Action Taken):&#10;- 교체 부품 (Replaced Parts):&#10;- 소프트웨어 버전 (SW Version):&#10;- 최종 점검 내역 (Final Inspection):" 
+                    placeholder={t("- 조치 내용 (Action Taken):\n- 교체 부품 (Replaced Parts):\n- 소프트웨어 버전 (SW Version):\n- 최종 점검 내역 (Final Inspection):")} 
                     value={reportEditForm.repair_info} 
                     onChange={e=>setReportEditForm({...reportEditForm, repair_info: e.target.value})} 
                     className="w-full border rounded-lg p-3 resize-y outline-none focus:ring-2 focus:ring-amber-200 leading-relaxed font-mono text-sm" 
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <button type="submit" className="bg-amber-600 text-white font-bold px-6 py-2 rounded-lg text-xs shadow">수리 완료 및 레포트 저장</button>
+                  <button type="submit" className="bg-amber-600 text-white font-bold px-6 py-2 rounded-lg text-xs shadow">{t("수리 완료 및 레포트 저장")}</button>
                 </div>
               </form>
             )}
@@ -2372,8 +2388,8 @@ const handleLogin = async (e: React.FormEvent) => {
                     <tr className="border-b border-slate-900">
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">MSM Code</td>
                       <td colSpan={3} className="p-2 font-mono font-bold text-blue-900">
-                        대표증상원인: {CAUSE_CLASSIFICATIONS.find(x => x.code === reportModalCase.cause_code)?.label || reportModalCase.cause_code || '미분류'} [{reportModalCase.cause_code || 'X'}] | 
-                        대표처리구분: {ACTION_CLASSIFICATIONS.find(x => x.code === reportModalCase.action_code)?.label || reportModalCase.action_code || '미결정'} [{reportModalCase.action_code || 'PC00'}]
+                        
+                        {t("대표증상원인:")}{' '}{CAUSE_CLASSIFICATIONS.find(x => x.code === reportModalCase.cause_code)?.label || reportModalCase.cause_code || t("미분류")} [{reportModalCase.cause_code || 'X'}{t("] | 대표처리구분:")}{' '}{ACTION_CLASSIFICATIONS.find(x => x.code === reportModalCase.action_code)?.label || reportModalCase.action_code || t("미결정")} [{reportModalCase.action_code || 'PC00'}]
                       </td>
                     </tr>
                     <tr className="border-b border-slate-900">
@@ -2418,19 +2434,19 @@ const handleLogin = async (e: React.FormEvent) => {
       {uploadReport.show && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-8 shadow-2xl border border-slate-200">
-            <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">📊 데이터 업로드 처리 결과</h3>
+            <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">{t("📊 데이터 업로드 처리 결과")}</h3>
             <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center"><p className="text-slate-500 text-xs font-bold mb-1">총 스캔 데이터</p><p className="text-2xl font-black text-slate-800">{uploadReport.total}<span className="text-sm font-medium ml-1">건</span></p></div>
-              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-center"><p className="text-emerald-700 text-xs font-bold mb-1">신규 반영 데이터</p><p className="text-2xl font-black text-emerald-600">{uploadReport.inserted}<span className="text-sm font-medium ml-1">건</span></p></div>
-              <div className="bg-rose-50 p-4 rounded-xl border border-rose-200 text-center"><p className="text-rose-700 text-xs font-bold mb-1">중복 감지 건수</p><p className="text-2xl font-black text-rose-600">{uploadReport.duplicates.length}<span className="text-sm font-medium ml-1">건</span></p></div>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center"><p className="text-slate-500 text-xs font-bold mb-1">{t("총 스캔 데이터")}</p><p className="text-2xl font-black text-slate-800">{uploadReport.total}<span className="text-sm font-medium ml-1">{t("건")}</span></p></div>
+              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-center"><p className="text-emerald-700 text-xs font-bold mb-1">{t("신규 반영 데이터")}</p><p className="text-2xl font-black text-emerald-600">{uploadReport.inserted}<span className="text-sm font-medium ml-1">{t("건")}</span></p></div>
+              <div className="bg-rose-50 p-4 rounded-xl border border-rose-200 text-center"><p className="text-rose-700 text-xs font-bold mb-1">{t("중복 감지 건수")}</p><p className="text-2xl font-black text-rose-600">{uploadReport.duplicates.length}<span className="text-sm font-medium ml-1">{t("건")}</span></p></div>
             </div>
             {uploadReport.duplicates.length > 0 ? (
               <div className="mb-6">
-                <h4 className="text-sm font-bold text-slate-700 mb-2">{uploadReport.type === '생산이력조회' ? '⚠️ 아래 항목은 기존 데이터를 업데이트(덮어쓰기) 했습니다.' : '⚠️ 아래 항목은 이중 합산 방지를 위해 스킵(제외) 되었습니다.'}</h4>
+                <h4 className="text-sm font-bold text-slate-700 mb-2">{uploadReport.type === '생산이력조회' ? t("⚠️ 아래 항목은 기존 데이터를 업데이트(덮어쓰기) 했습니다.") : t("⚠️ 아래 항목은 이중 합산 방지를 위해 스킵(제외) 되었습니다.")}</h4>
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 max-h-60 overflow-y-auto"><ul className="space-y-1 text-sm font-mono text-slate-600">{uploadReport.duplicates.map((dup, i) => <li key={i} className="border-b border-slate-100 pb-1 last:border-0 last:pb-0 flex items-center gap-2"><span className="text-rose-500 font-black">•</span> {dup}</li>)}</ul></div>
               </div>
-            ) : (<div className="bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-xl text-center font-bold mb-6">✨ 중복 없이 완벽하게 신규 등록되었습니다!</div>)}
-            <div className="flex justify-end pt-4 border-t border-slate-100"><button onClick={() => { setUploadReport({ ...uploadReport, show: false }); loadAllData(); }} className="px-8 py-3.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow-lg">확인 및 새로고침</button></div>
+            ) : (<div className="bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-xl text-center font-bold mb-6">{t("✨ 중복 없이 완벽하게 신규 등록되었습니다!")}</div>)}
+            <div className="flex justify-end pt-4 border-t border-slate-100"><button onClick={() => { setUploadReport({ ...uploadReport, show: false }); loadAllData(); }} className="px-8 py-3.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow-lg">{t("확인 및 새로고침")}</button></div>
           </div>
         </div>
       )}
