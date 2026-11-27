@@ -47,7 +47,7 @@ from auth.users u
 on conflict (user_id) do nothing;
 
 -- 고객서비스팀장 계정은 본사 관리자
-update public.profiles set role = 'hq_admin' where email = 'hy90630@mek-ics.com';
+update public.profiles set role = 'hq_admin' where email = 'schong@mek-ics.com';
 
 -- 권한 판단용 함수 (RLS 정책 안에서 사용)
 create or replace function public.my_role() returns varchar
@@ -286,5 +286,5 @@ create policy v2_downloads_dealer on public.download_files for select
 
 commit;
 
--- 실행 후 확인용 (결과에 본인 계정이 hq_admin 으로 보여야 합니다)
+-- 실행 후 확인용 (schong@mek-ics.com 이 hq_admin 으로 보여야 합니다)
 select email, role, dealer_code from public.profiles order by role, email;
