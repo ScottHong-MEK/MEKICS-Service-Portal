@@ -182,6 +182,12 @@ export default function Dashboard() {
   const [uploadingFiles, setUploadingFiles] = useState(false)
   
   const [prodSearch, setProdSearch] = useState('')
+  const [dealers, setDealers] = useState<Record<string, string>>({})
+  // LOT / 버전 역추적
+  const [traceQuery, setTraceQuery] = useState('')
+  const [traceComponent, setTraceComponent] = useState('all')
+  const [traceResults, setTraceResults] = useState<any[] | null>(null)
+  const [traceLoading, setTraceLoading] = useState(false)
   const [salesSearch, setSalesSearch] = useState('')
 
   // 📅 매출이력 전용 검색/필터 상태
@@ -279,7 +285,9 @@ useEffect(() => {
     return (
       (item.serial_number || '').toLowerCase().includes(q) ||
       (item.product_model || '').toLowerCase().includes(q) ||
-      (item.hospital_name || '').toLowerCase().includes(q)
+      (item.hospital_name || '').toLowerCase().includes(q) ||
+      (item.dealer_code || '').toLowerCase().includes(q) ||
+      (dealers[item.dealer_code] || '').toLowerCase().includes(q)
     )
   })
 
@@ -394,6 +402,9 @@ const handleLogin = async (e: React.FormEvent) => {
     try {
       const eqData = await fetchAll((f, t) => supabase.from('equipments').select('*').order('manufacture_date', { ascending: false, nullsFirst: false }).order('serial_number').range(f, t))
       setEquipments(eqData.map((eq: any) => ({ ...eq, model_name: getModelFromSN(eq.serial_number, eq.model_name) })))
+
+      const dealerData = await fetchAll((f, t) => supabase.from('dealers').select('code, name').order('code').range(f, t))
+      setDealers(Object.fromEntries(dealerData.map((d: any) => [d.code, d.name])))
 
       const caseData = await fetchAll((f, t) => supabase.from('service_cases').select('*').order('created_at', { ascending: false }).range(f, t))
       setAllServiceCases(caseData)
@@ -577,6 +588,44 @@ const handleLogin = async (e: React.FormEvent) => {
     }
   }
 
+  // LOT / HW / SW 버전으로 장비 역추적 (현재 장착 중인 구성품 기준)
+  const handleTrace = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    const q = traceQuery.trim()
+    if (!q) return
+    setTraceLoading(true)
+    try {
+      const like = `%${q.replace(/[%_,()]/g, '')}%`
+      const rows = await fetchAll((f, t) => {
+        let qb = supabase.from('equipment_components')
+          .select('serial_number, component, lot, hw_version, sw_version, source, created_at, equipments(model_name, dealer_code, shipment_date, status)')
+          .eq('is_current', true)
+          .or(`lot.ilike.${like},hw_version.ilike.${like},sw_version.ilike.${like}`)
+        if (traceComponent !== 'all') qb = qb.eq('component', traceComponent)
+        return qb.order('serial_number').range(f, t)
+      })
+      setTraceResults(rows)
+    } catch (err: any) {
+      alert(`역추적 조회 실패: ${err.message}`)
+    } finally {
+      setTraceLoading(false)
+    }
+  }
+
+  const exportTraceExcel = () => {
+    if (!traceResults) return
+    const ws = XLSX.utils.json_to_sheet(traceResults.map(r => ({
+      'SN': r.serial_number, '모델': r.equipments?.model_name || '', '구성품': r.component,
+      'LOT': r.lot || '', 'HW': r.hw_version || '', 'SW': r.sw_version || '',
+      '출고처코드': r.equipments?.dealer_code || '', '출고처': dealers[r.equipments?.dealer_code] || '',
+      '출고일': r.equipments?.shipment_date || '', '상태': r.equipments?.status || '',
+      '등록경로': r.source === 'service' ? '서비스 교체' : '생산',
+    })))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'LOT_Trace')
+    XLSX.writeFile(wb, `MEKICS_LOT역추적_${traceQuery.trim()}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
   const handleSearch = async (e?: React.FormEvent, targetSn?: string) => {
     if (e) e.preventDefault()
     const query = (targetSn || serialQuery).trim()
@@ -600,10 +649,12 @@ const handleLogin = async (e: React.FormEvent) => {
       supabase.from('installations').select('*').eq('serial_number', query).maybeSingle(),
       supabase.from('warranties').select('*').eq('serial_number', query).maybeSingle(),
       supabase.from('service_cases').select('*').eq('serial_number', query).order('id', { ascending: false }),
-      supabase.from('sales_records').select('*').eq('serial_number', query).maybeSingle()
+      supabase.from('sales_records').select('*').eq('serial_number', query).order('sales_date', { ascending: true }).limit(1).maybeSingle()
     ])
+    const { data: compData } = await supabase.from('equipment_components').select('*').eq('serial_number', query)
+      .order('component').order('created_at', { ascending: false })
 
-    setSearchResult({ equipment: eq, installation: installRes.data, warranty: warrantyRes.data, serviceCases: serviceRes.data || [], sales: salesRes.data })
+    setSearchResult({ equipment: eq, installation: installRes.data, warranty: warrantyRes.data, serviceCases: serviceRes.data || [], sales: salesRes.data, components: compData || [] })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -1347,9 +1398,12 @@ const handleLogin = async (e: React.FormEvent) => {
                   <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-sm space-y-3">
                       <h4 className="font-extrabold text-slate-800 border-b pb-3 flex items-center gap-2">🏭 제조 스펙</h4>
-                      <p><span className="text-slate-500 w-20 inline-block">생산일자:</span> <span className="font-bold text-slate-800">{searchResult.equipment.manufacture_date || '-'}</span></p>
-                      <p><span className="text-slate-500 w-20 inline-block">메인보드:</span> <span className="font-bold text-slate-800">{searchResult.equipment.board_info || '-'}</span></p>
-                      <p><span className="text-slate-500 w-20 inline-block">펌웨어:</span> <span className="font-bold text-slate-800">{searchResult.equipment.sw_version || 'v1.0'}</span></p>
+                      <p><span className="text-slate-500 w-20 inline-block">품목:</span> <span className="font-bold text-slate-800">{searchResult.equipment.item_name || '-'}</span></p>
+                      <p><span className="text-slate-500 w-20 inline-block">생산일자:</span> <span className="font-bold text-slate-800">{searchResult.equipment.manufacture_date || '-'}</span>{searchResult.equipment.receipt_type && <span className="ml-2 text-xs bg-slate-100 border px-1.5 py-0.5 rounded">{searchResult.equipment.receipt_type}</span>}</p>
+                      <p><span className="text-slate-500 w-20 inline-block">출고처:</span> <span className="font-bold text-blue-700">{searchResult.equipment.dealer_code ? `${dealers[searchResult.equipment.dealer_code] || ''} (${searchResult.equipment.dealer_code})` : '-'}</span></p>
+                      <p><span className="text-slate-500 w-20 inline-block">출고일:</span> <span className="font-bold text-slate-800">{searchResult.equipment.shipment_date || '-'}</span></p>
+                      <p><span className="text-slate-500 w-20 inline-block">펌웨어:</span> <span className="font-bold text-slate-800">{searchResult.equipment.sw_version || '-'}</span></p>
+                      <p className="break-all"><span className="text-slate-500 w-20 inline-block">UDI:</span> <span className="font-mono text-xs text-slate-700">{searchResult.equipment.udi || '-'}</span></p>
                     </div>
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-sm space-y-3">
                       <h4 className="font-extrabold text-slate-800 border-b pb-3 flex items-center gap-2">💰 판매 이력</h4>
@@ -1366,6 +1420,34 @@ const handleLogin = async (e: React.FormEvent) => {
                     </div>
                   </div>
                   
+                  {searchResult.components?.length > 0 && (
+                    <div className="px-6 pb-6 border-t border-slate-100 pt-4">
+                      <h4 className="text-sm font-bold text-slate-700 mb-3">🔧 구성품 (보드 / 모듈) 현황 <span className="text-xs font-medium text-slate-400 ml-2">회색 줄 = 교체되기 전 이력</span></h4>
+                      <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                        <table className="w-full text-left text-xs whitespace-nowrap">
+                          <thead className="bg-slate-100 text-slate-700">
+                            <tr><th className="p-2.5">구성품</th><th className="p-2.5">LOT</th><th className="p-2.5">HW</th><th className="p-2.5">SW</th><th className="p-2.5">DC HW / SW</th><th className="p-2.5">등록 경로</th><th className="p-2.5">등록일</th></tr>
+                          </thead>
+                          <tbody>
+                            {searchResult.components.map((c: any) => (
+                              <tr key={c.id} className={`border-b border-slate-100 ${c.is_current ? 'text-slate-800' : 'text-slate-400 line-through decoration-slate-300'}`}>
+                                <td className="p-2.5 font-bold">{c.component}</td>
+                                <td className="p-2.5 font-mono">
+                                  <button type="button" onClick={() => { if (c.lot) { setTraceQuery(c.lot); setTraceComponent(c.component); setActiveTab('production') } }} className="hover:text-blue-600 hover:underline" title="이 LOT이 들어간 장비 역추적">{c.lot || '-'}</button>
+                                </td>
+                                <td className="p-2.5 font-mono">{c.hw_version || '-'}</td>
+                                <td className="p-2.5 font-mono">{c.sw_version || '-'}</td>
+                                <td className="p-2.5 font-mono">{[c.dc_hw_version, c.dc_sw_version].filter(Boolean).join(' / ') || '-'}</td>
+                                <td className="p-2.5">{c.source === 'service' ? <span className="text-amber-700 font-bold">서비스 교체</span> : '생산'}</td>
+                                <td className="p-2.5 font-mono">{c.created_at?.slice(0, 10)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
                   {searchResult.serviceCases.length > 0 && (
                     <div className="px-6 pb-6 border-t border-slate-100 pt-4">
                       <h4 className="text-sm font-bold text-slate-700 mb-3">최근 A/S 내역</h4>
@@ -1403,10 +1485,65 @@ const handleLogin = async (e: React.FormEvent) => {
                 </button>
               </div>
 
+              {/* 🔎 LOT / 버전 역추적 */}
+              <div className="mb-6 bg-amber-50/60 border border-amber-200 rounded-2xl p-5 space-y-4">
+                <div>
+                  <h4 className="font-black text-amber-900">🔎 LOT / HW·SW 버전 역추적</h4>
+                  <p className="text-xs text-amber-800/80 mt-1">특정 LOT이나 버전이 현재 장착된 장비를 찾습니다. (예: VF04-26C1-0100, 1.00.02B, 1.01.00R1) · 필드 액션 / 리콜 대상 파악용</p>
+                </div>
+                <form onSubmit={handleTrace} className="flex flex-wrap gap-2">
+                  <select value={traceComponent} onChange={e => setTraceComponent(e.target.value)} className="border border-amber-300 rounded-xl px-3 py-2 text-sm font-bold bg-white">
+                    <option value="all">전체 구성품</option>
+                    {['MAIN B/D', 'PNEUMATIC B/D', 'BLOWER', 'WIFI B/D', 'D/D POWER B/D', 'A/D POWER B/D (SMPS)', "Heater plate Ass'y", 'DC Fan', 'MM105 (Vent SpO2 Option)', 'Masimo SpO2']
+                      .concat(traceComponent !== 'all' && !['MAIN B/D', 'PNEUMATIC B/D', 'BLOWER', 'WIFI B/D', 'D/D POWER B/D', 'A/D POWER B/D (SMPS)', "Heater plate Ass'y", 'DC Fan', 'MM105 (Vent SpO2 Option)', 'Masimo SpO2'].includes(traceComponent) ? [traceComponent] : [])
+                      .map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <input value={traceQuery} onChange={e => setTraceQuery(e.target.value)} placeholder="LOT 또는 HW/SW 버전 입력" className="flex-1 min-w-[220px] border border-amber-300 rounded-xl px-4 py-2 text-sm font-mono bg-white" />
+                  <button type="submit" disabled={traceLoading} className="bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold px-5 py-2 rounded-xl">{traceLoading ? '조회 중...' : '역추적'}</button>
+                  {traceResults && traceResults.length > 0 && (
+                    <button type="button" onClick={exportTraceExcel} className="bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold px-4 py-2 rounded-xl">📄 엑셀</button>
+                  )}
+                </form>
+                {traceResults && (
+                  traceResults.length === 0 ? <p className="text-sm text-slate-500">해당 조건의 장비가 없습니다.</p> : (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <span className="bg-white border border-amber-300 rounded-lg px-3 py-1.5 font-black text-amber-900">총 {new Set(traceResults.map(r => r.serial_number)).size}대</span>
+                        {Object.entries(traceResults.reduce((acc: Record<string, Set<string>>, r: any) => {
+                          const k = r.equipments?.dealer_code ? (dealers[r.equipments.dealer_code] || r.equipments.dealer_code) : '미출고 / 재고'
+                          ;(acc[k] = acc[k] || new Set()).add(r.serial_number); return acc
+                        }, {})).sort((a: any, b: any) => b[1].size - a[1].size).map(([k, v]: any) => (
+                          <span key={k} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold text-slate-700">{k} <span className="text-amber-700">{v.size}</span></span>
+                        ))}
+                      </div>
+                      <div className="overflow-x-auto border border-amber-200 rounded-xl max-h-[320px] overflow-y-auto bg-white">
+                        <table className="w-full text-left text-xs whitespace-nowrap">
+                          <thead className="sticky top-0 bg-amber-100 text-amber-900"><tr><th className="p-2.5">SN</th><th className="p-2.5">모델</th><th className="p-2.5">구성품</th><th className="p-2.5">LOT</th><th className="p-2.5">HW</th><th className="p-2.5">SW</th><th className="p-2.5">출고처</th><th className="p-2.5">출고일</th></tr></thead>
+                          <tbody>
+                            {traceResults.map((r: any, i: number) => (
+                              <tr key={i} onClick={() => handleSearch(undefined, r.serial_number)} className="border-b border-slate-100 hover:bg-amber-50 cursor-pointer">
+                                <td className="p-2.5 font-mono font-bold text-blue-700">{r.serial_number}</td>
+                                <td className="p-2.5">{r.equipments?.model_name || '-'}</td>
+                                <td className="p-2.5">{r.component}</td>
+                                <td className="p-2.5 font-mono">{r.lot || '-'}</td>
+                                <td className="p-2.5 font-mono">{r.hw_version || '-'}</td>
+                                <td className="p-2.5 font-mono">{r.sw_version || '-'}</td>
+                                <td className="p-2.5">{r.equipments?.dealer_code ? (dealers[r.equipments.dealer_code] || r.equipments.dealer_code) : '-'}</td>
+                                <td className="p-2.5 font-mono">{r.equipments?.shipment_date || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+
               <div className="mb-4 flex justify-end">
                 <input
                   type="text"
-                  placeholder="🔍 시리얼 번호, 모델명, 병원명 검색..."
+                  placeholder="🔍 시리얼 번호, 모델명, 출고처 검색..."
                   value={prodSearch}
                   onChange={(e) => setProdSearch(e.target.value)}
                   className="w-full md:w-80 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm"
@@ -1416,12 +1553,12 @@ const handleLogin = async (e: React.FormEvent) => {
               <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[700px] overflow-y-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="sticky top-0 bg-slate-100 text-slate-700 shadow-sm z-10">
-                    <tr><th className="p-4">시리얼 번호</th><th className="p-4">감지 모델명</th><th className="p-4">생산일자</th><th className="p-4">HW/SW 사양</th><th className="p-4">상태</th></tr>
+                    <tr><th className="p-4">시리얼 번호</th><th className="p-4">모델명</th><th className="p-4">생산일자</th><th className="p-4">출고처</th><th className="p-4">출고일</th><th className="p-4">HW/SW 사양</th><th className="p-4">상태</th></tr>
                   </thead>
                   <tbody>
                     {filteredEquipments.map((eq) => (
                       <tr key={eq.serial_number} onClick={() => handleSearch(undefined, eq.serial_number)} className="border-b border-slate-100 hover:bg-blue-50 cursor-pointer transition">
-                        <td className="p-4 font-mono font-bold text-blue-700">{eq.serial_number}</td><td className="p-4 font-bold text-emerald-700">{eq.model_name}</td><td className="p-4 text-slate-600 font-medium">{eq.manufacture_date || '-'}</td><td className="p-4 text-slate-500 truncate max-w-[300px]">{eq.board_info}</td><td className="p-4"><span className="bg-white border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm">{eq.status}</span></td>
+                        <td className="p-4 font-mono font-bold text-blue-700">{eq.serial_number}</td><td className="p-4 font-bold text-emerald-700">{eq.model_name}</td><td className="p-4 text-slate-600 font-medium">{eq.manufacture_date || '-'}</td><td className="p-4 text-slate-700 font-medium truncate max-w-[220px]">{eq.dealer_code ? (dealers[eq.dealer_code] || eq.dealer_code) : '-'}</td><td className="p-4 text-slate-600 font-mono">{eq.shipment_date || '-'}</td><td className="p-4 text-slate-500 truncate max-w-[300px]">{eq.board_info}{eq.sw_version ? ` · ${eq.sw_version}` : ''}</td><td className="p-4"><span className="bg-white border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm">{eq.status}</span></td>
                       </tr>
                     ))}
                   </tbody>
