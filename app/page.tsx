@@ -190,7 +190,7 @@ export default function Dashboard() {
 
   // 📥 다운로드 센터 전용 상태 (하위 폴더 구분)
   const [downloadSubTab, setDownloadSubTab] = useState<'sw' | 'manual'>('sw') // 'sw' (Software Download) | 'manual' (Manual Download)
-  const [downloadFiles, setDownloadFiles] = useState<any[]>(INITIAL_DOWNLOAD_FILES)
+  const [downloadFiles, setDownloadFiles] = useState<any[]>([])
   const [selectedDownloadProduct, setSelectedDownloadProduct] = useState<string>('all')
   const [downloadSearch, setDownloadSearch] = useState('')
   const [showUploadDownloadModal, setShowUploadDownloadModal] = useState(false)
@@ -249,11 +249,11 @@ useEffect(() => {
     setIsMounted(true)
     
     // 브라우저에 저장된 로그인 정보 자동 복원
+    // 보안: 예전에 저장된 비밀번호가 남아 있으면 삭제 (비밀번호는 브라우저에 저장하지 않음)
+    localStorage.removeItem('mek_saved_password')
     const savedEmail = localStorage.getItem('mek_saved_email')
-    const savedPassword = localStorage.getItem('mek_saved_password')
-    if (savedEmail && savedPassword) {
+    if (savedEmail) {
       setLoginEmail(savedEmail)
-      setLoginPassword(savedPassword)
       setRememberMe(true)
     }
 
@@ -372,10 +372,8 @@ const handleLogin = async (e: React.FormEvent) => {
       // 기억하기 체크 시 브라우저(localStorage)에 저장
       if (rememberMe) {
         localStorage.setItem('mek_saved_email', loginEmail)
-        localStorage.setItem('mek_saved_password', loginPassword)
       } else {
         localStorage.removeItem('mek_saved_email')
-        localStorage.removeItem('mek_saved_password')
       }
       setSession(data.session)
       loadAllData()
@@ -400,7 +398,7 @@ const handleLogin = async (e: React.FormEvent) => {
     if (salesData) setSalesRecords(salesData)
 
     const { data: downloadData } = await supabase.from('download_files').select('*').order('id', { ascending: false })
-    if (downloadData && downloadData.length > 0) setDownloadFiles(downloadData)
+    if (downloadData) setDownloadFiles(downloadData)
 
     setLoading(false)
   }
@@ -415,12 +413,15 @@ const handleLogin = async (e: React.FormEvent) => {
     const filePath = `downloads/${fileName}`
 
     const { error: storageError } = await supabase.storage.from('download-files').upload(filePath, uploadingDownloadFile)
-    
-    let publicUrl = '#'
-    if (!storageError) {
-      const { data: urlData } = supabase.storage.from('download-files').getPublicUrl(filePath)
-      if (urlData.publicUrl) publicUrl = urlData.publicUrl
+    if (storageError) {
+      alert(`파일 업로드 실패: ${storageError.message}`)
+      setUploading(false)
+      return
     }
+
+    let publicUrl = '#'
+    const { data: urlData } = supabase.storage.from('download-files').getPublicUrl(filePath)
+    if (urlData.publicUrl) publicUrl = urlData.publicUrl
 
     const newEntry = {
       product: downloadUploadForm.product,
@@ -435,11 +436,12 @@ const handleLogin = async (e: React.FormEvent) => {
 
     const { data: dbData, error: dbError } = await supabase.from('download_files').insert([newEntry]).select()
 
-    if (!dbError && dbData) {
-      setDownloadFiles([dbData[0], ...downloadFiles])
-    } else {
-      setDownloadFiles([{ id: Date.now(), ...newEntry }, ...downloadFiles])
+    if (dbError || !dbData) {
+      alert(`자료 등록 실패: ${dbError?.message || '알 수 없는 오류'}`)
+      setUploading(false)
+      return
     }
+    setDownloadFiles([dbData[0], ...downloadFiles])
 
     alert('다운로드 자료가 성공적으로 등록되었습니다.')
     setShowUploadDownloadModal(false)
@@ -455,7 +457,7 @@ const handleLogin = async (e: React.FormEvent) => {
     const { data: eq } = await supabase.from('equipments').select('*').eq('serial_number', cleanSn).maybeSingle()
     const { data: sales } = await supabase.from('sales_records').select('*').eq('serial_number', cleanSn).maybeSingle()
 
-    const hospital = sales?.customer_name || 'Symbiomed'
+    const hospital = sales?.customer_name || ''
     const model = getModelFromSN(cleanSn, eq?.model_name)
     
     const refDateStr = sales?.sales_date || eq?.shipment_date || eq?.manufacture_date
@@ -611,12 +613,12 @@ const handleLogin = async (e: React.FormEvent) => {
         if (type === 'omega') {
           const rows: any[] = []
           matrix.forEach((row) => {
-            const sn = String(row[3] || row[0] || '').trim()
+            const sn = String(row[3] || '').trim()
             if (!sn || sn === 'SN' || sn === '품목코드' || sn.includes('제품생산이력')) return
             rows.push({
               serial_number: sn,
               model_name: getModelFromSN(sn, String(row[7] || '').trim()),
-              manufacture_date: row[4] ? String(row[4]).replace(/\./g, '-').trim() : '2026-01-01',
+              manufacture_date: row[4] ? String(row[4]).replace(/\./g, '-').trim() : null,
               shipment_date: row[70] ? String(row[70]).replace(/\./g, '-').trim() : null,
               board_info: [String(row[8]||''), String(row[14]||'')].filter(x => x && x!=='LOT'&&x!=='MCU B/D'&&x!=='MAIN B/D').join(' | ') || 'Standard Board Set',
               sw_version: String(row[10]||'') || 'v1.0',
@@ -861,7 +863,7 @@ const handleLogin = async (e: React.FormEvent) => {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
                 />
-                <span>로그인 정보 기억하기 (이메일 및 비밀번호)</span>
+                <span>이메일 기억하기</span>
               </label>
             </div>
 
@@ -1572,7 +1574,7 @@ const handleLogin = async (e: React.FormEvent) => {
                             <td className="p-4"><span className={`px-2.5 py-1 rounded text-xs font-bold ${sc.classification==='warranty in'?'bg-blue-100 text-blue-800':'bg-slate-100 text-slate-700'}`}>{sc.classification==='warranty in'?'Warranty In (무상)':'Warranty Out (유상)'}</span></td>
                             <td className="p-4 text-slate-800 font-medium truncate max-w-xs">{sc.symptom || sc.issue_description}</td>
                             <td className="p-4">
-                              <button onClick={() => { setSelectedReportCase(sc); setReportEditForm({ reviewer: sc.reviewer||'Scott Hong', reviewer_date: sc.created_at?.slice(0,10)||new Date().toISOString().slice(0,10), classification: sc.classification||'warranty in', cause_code: sc.cause_code||'X', action_code: sc.action_code||'PC00', cause_analysis: sc.cause_analysis||'', repair_info: sc.repair_info||'', repair_period: sc.repair_period||'2026.08.01 ~ 2026.08.10', repair_cost: sc.repair_cost||0, inspector: sc.inspector||'Scott Hong', processing_date: sc.processing_date||new Date().toISOString().slice(0,10) }); }} className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm flex items-center gap-1">
+                              <button onClick={() => { setSelectedReportCase(sc); setReportEditForm({ reviewer: sc.reviewer||'Scott Hong', reviewer_date: sc.created_at?.slice(0,10)||new Date().toISOString().slice(0,10), classification: sc.classification||'warranty in', cause_code: sc.cause_code||'X', action_code: sc.action_code||'PC00', cause_analysis: sc.cause_analysis||'', repair_info: sc.repair_info||'', repair_period: sc.repair_period||'', repair_cost: sc.repair_cost||0, inspector: sc.inspector||'Scott Hong', processing_date: sc.processing_date||new Date().toISOString().slice(0,10) }); }} className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm flex items-center gap-1">
                                 📄 레포트 보기
                               </button>
                             </td>
@@ -1784,7 +1786,7 @@ const handleLogin = async (e: React.FormEvent) => {
                               action_code: sc.action_code||'PC00',
                               cause_analysis: sc.cause_analysis||'',
                               repair_info: sc.repair_info||'',
-                              repair_period: sc.repair_period||'2026.08.01 ~ 2026.08.10',
+                              repair_period: sc.repair_period||'',
                               repair_cost: sc.repair_cost||0,
                               inspector: sc.inspector||'Scott Hong',
                               processing_date: sc.processing_date||new Date().toISOString().slice(0,10)
@@ -2057,35 +2059,35 @@ const handleLogin = async (e: React.FormEvent) => {
                       <td className="w-28 bg-slate-100 font-bold p-2 border-r border-slate-900">Serial No.</td>
                       <td className="p-2 font-mono font-bold border-r border-slate-900">{reportModalCase.serial_number}</td>
                       <td className="w-28 bg-slate-100 font-bold p-2 border-r border-slate-900">Date</td>
-                      <td className="p-2 font-mono">{reportModalCase.created_at?.slice(0, 10) || '2026.08.10'}</td>
+                      <td className="p-2 font-mono">{reportModalCase.created_at?.slice(0, 10) || '-'}</td>
                     </tr>
                     <tr className="border-b border-slate-900">
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Name of Hospital</td>
-                      <td className="p-2 font-bold border-r border-slate-900">{reportModalCase.hospital_name || 'Symbiomed'}</td>
+                      <td className="p-2 font-bold border-r border-slate-900">{reportModalCase.hospital_name || '-'}</td>
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Contact phone</td>
                       <td className="p-2 font-mono">{reportModalCase.contact_phone || '-'}</td>
                     </tr>
                     <tr className="border-b border-slate-900">
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Contact person</td>
-                      <td className="p-2 border-r border-slate-900">{reportModalCase.contact_person || 'Terry Wang'}</td>
+                      <td className="p-2 border-r border-slate-900">{reportModalCase.contact_person || '-'}</td>
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">E-mail</td>
-                      <td className="p-2 font-mono">{reportModalCase.email || 'Terry.wang@sos-symbiomed.com'}</td>
+                      <td className="p-2 font-mono">{reportModalCase.email || '-'}</td>
                     </tr>
                     <tr className="border-b border-slate-900">
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Product / Symptom</td>
                       <td colSpan={3} className="p-2">
-                        <strong>Product:</strong> {reportModalCase.product_model || 'HFT700'} / <strong>Symptom:</strong> {reportModalCase.symptom || reportModalCase.issue_description}
+                        <strong>Product:</strong> {reportModalCase.product_model || '-'} / <strong>Symptom:</strong> {reportModalCase.symptom || reportModalCase.issue_description}
                       </td>
                     </tr>
                     <tr className="border-b border-slate-900">
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Problem description</td>
                       <td colSpan={3} className="p-2 h-16 align-top">
-                        {reportModalCase.problem_description || 'Heated wire sensor fail, chamber sensor fail, VAC 240 error'}
+                        {reportModalCase.problem_description || '-'}
                       </td>
                     </tr>
                     <tr>
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Remark</td>
-                      <td colSpan={3} className="p-2">{reportModalCase.remark || 'AC Power Cord'}</td>
+                      <td colSpan={3} className="p-2">{reportModalCase.remark || '-'}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2099,9 +2101,9 @@ const handleLogin = async (e: React.FormEvent) => {
                   <tbody>
                     <tr className="border-b border-slate-900">
                       <td className="w-28 bg-slate-100 font-bold p-2 border-r border-slate-900">Reviewer</td>
-                      <td className="p-2 font-bold border-r border-slate-900">{reportModalCase.reviewer || 'Scott Hong'}</td>
+                      <td className="p-2 font-bold border-r border-slate-900">{reportModalCase.reviewer || '-'}</td>
                       <td className="w-28 bg-slate-100 font-bold p-2 border-r border-slate-900">Reviewer date</td>
-                      <td className="p-2 font-mono">{reportModalCase.created_at?.slice(0, 10) || '2026.08.10'}</td>
+                      <td className="p-2 font-mono">{reportModalCase.created_at?.slice(0, 10) || '-'}</td>
                     </tr>
                     <tr className="border-b border-slate-900">
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Classification</td>
@@ -2132,29 +2134,26 @@ const handleLogin = async (e: React.FormEvent) => {
                     <tr className="border-b border-slate-900">
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Cause analysis</td>
                       <td colSpan={3} className="p-2 font-medium">
-                        {reportModalCase.cause_analysis || 'Power Board, Heater Plate Ass\'y, Heated Con. Board Failure.'}
+                        {reportModalCase.cause_analysis || '-'}
                       </td>
                     </tr>
                     <tr className="border-b border-slate-900">
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Repair information</td>
                       <td colSpan={3} className="p-2 h-44 align-top whitespace-pre-line leading-relaxed">
-                        {reportModalCase.repair_info || `1. Defective components replaced: Power Board, Heater Plate Ass'y, Heated Con Board
-2. Software upgraded to latest versions: Main Software 1.05.00R21 / Pneumatic Software 1.05.00R23
-3. Performed full calibration (Ins. Flow, O2 21%/100%), Humidifier & Alarm function test
-4. Final operational confirmation completed. Normal operation verified.`}
+                        {reportModalCase.repair_info || '-'}
                       </td>
                     </tr>
                     <tr className="border-b border-slate-900">
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Repair period</td>
-                      <td className="p-2 font-mono border-r border-slate-900">{reportModalCase.repair_period || '2026.07.16 ~ 2026.08.10'}</td>
+                      <td className="p-2 font-mono border-r border-slate-900">{reportModalCase.repair_period || '-'}</td>
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Processing date</td>
-                      <td className="p-2 font-mono">{reportModalCase.processing_date || '2026.08.10'}</td>
+                      <td className="p-2 font-mono">{reportModalCase.processing_date || '-'}</td>
                     </tr>
                     <tr>
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Repair cost</td>
                       <td className="p-2 font-mono font-bold border-r border-slate-900">₩{Number(reportModalCase.repair_cost || 0).toLocaleString()}</td>
                       <td className="bg-slate-100 font-bold p-2 border-r border-slate-900">Inspector</td>
-                      <td className="p-2 font-bold">{reportModalCase.inspector || 'Scott Hong'}</td>
+                      <td className="p-2 font-bold">{reportModalCase.inspector || '-'}</td>
                     </tr>
                   </tbody>
                 </table>

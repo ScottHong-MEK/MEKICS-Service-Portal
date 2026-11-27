@@ -7,13 +7,13 @@ function getAdminClient() {
   if (supabaseAdminInstance) return supabaseAdminInstance;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const serviceRoleKey = 
-    process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || 
-    process.env.SUPABASE_SERVICE_ROLE_KEY || 
-    '';
+  // 보안: service role 키는 절대 NEXT_PUBLIC_ 이름으로 두지 않습니다.
+  // NEXT_PUBLIC_ 변수는 브라우저 코드에 그대로 포함되어 누구나 볼 수 있기 때문입니다.
+  // 서버(Vercel 등)에서만 SUPABASE_SERVICE_ROLE_KEY 로 읽습니다.
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY 키가 설정되지 않았습니다.');
+    throw new Error('관리자 기능은 서버 배포(Vercel)에서만 동작합니다. SUPABASE_SERVICE_ROLE_KEY 가 설정되지 않았습니다.');
   }
 
   // 단 한 번만 생성하여 메모리 재사용
