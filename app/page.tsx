@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import * as XLSX from 'xlsx'
 import { fetchAll, chunk } from './lib/fetchAll'
-import { parseProductionHistory } from './lib/parsers/productionHistory'
+import { parseProductionHistory, type ProductionParseResult } from './lib/parsers/productionHistory'
 
 // 1. MSM 고장 원인 중분류 및 대표 처리 구분 매핑 (알파벳 순 정렬)
 const CAUSE_CLASSIFICATIONS = [
@@ -607,6 +607,121 @@ const handleLogin = async (e: React.FormEvent) => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // 생산이력 DB 저장 (대리점 → 장비 → 구성품 이력 순서)
+  const saveProductionData = async (parsed: ProductionParseResult) => {
+    if (parsed.equipments.length === 0) { setUploading(false); return alert('유효한 생산 데이터가 없습니다.') }
+
+    // (1) 대리점 등록 (새 코드만 추가, 기존 이름은 유지)
+    if (parsed.dealers.length > 0) {
+      const { error } = await supabase.from('dealers').upsert(parsed.dealers, { onConflict: 'code', ignoreDuplicates: true })
+      if (error) throw new Error(`대리점 저장 실패: ${error.message}`)
+    }
+
+    // (2) 기존 장비 상태 확인 (설치 완료 장비는 상태를 되돌리지 않음)
+    const sns = parsed.equipments.map(e => e.serial_number)
+    const existing = new Map<string, string>()
+    for (const part of chunk(sns, 200)) {
+      const { data, error } = await supabase.from('equipments').select('serial_number, status').in('serial_number', part)
+      if (error) throw new Error(`기존 장비 조회 실패: ${error.message}`)
+      data?.forEach((d: any) => existing.set(d.serial_number, d.status))
+    }
+
+    const compsBySn = new Map<string, typeof parsed.components>()
+    parsed.components.forEach(c => compsBySn.set(c.serial_number, [...(compsBySn.get(c.serial_number) || []), c]))
+
+    const rows = parsed.equipments.map(e => {
+      const comps = compsBySn.get(e.serial_number) || []
+      const main = comps.find(c => c.component === 'MAIN B/D')
+      const pneu = comps.find(c => c.component === 'PNEUMATIC B/D')
+      const { dealer_name, ...rest } = e
+      return {
+        ...rest,
+        model_name: getModelFromSN(e.serial_number, e.model_name || undefined),
+        status: existing.get(e.serial_number) === 'Installed' ? 'Installed' : e.status,
+        board_info: [main?.lot && `MAIN ${main.lot}`, pneu?.lot && `PNEU ${pneu.lot}`].filter(Boolean).join(' | ') || null,
+        sw_version: [main?.sw_version && `Main ${main.sw_version}`, pneu?.sw_version && `Pneu ${pneu.sw_version}`].filter(Boolean).join(' / ') || null,
+        source: 'omega',
+        omega_import_date: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+    })
+    for (const part of chunk(rows, 500)) {
+      const { error } = await supabase.from('equipments').upsert(part, { onConflict: 'serial_number' })
+      if (error) throw new Error(`장비 저장 실패: ${error.message}`)
+    }
+
+    // (3) 구성품 이력: 값이 바뀐 구성품만 새 행 추가, 이전 행은 is_current = false (이력 보존)
+    const current = new Map<string, any>()
+    for (const part of chunk(sns, 200)) {
+      const { data, error } = await supabase.from('equipment_components').select('*').eq('is_current', true).in('serial_number', part)
+      if (error) throw new Error(`구성품 조회 실패: ${error.message}`)
+      data?.forEach((c: any) => current.set(`${c.serial_number}|${c.component}`, c))
+    }
+    const same = (a: any, b: any) => ['lot', 'hw_version', 'sw_version', 'dc_hw_version', 'dc_sw_version'].every(k => (a[k] ?? null) === (b[k] ?? null))
+    const toRetire: number[] = []
+    const toInsert: any[] = []
+    parsed.components.forEach(c => {
+      const cur = current.get(`${c.serial_number}|${c.component}`)
+      if (cur && same(cur, c)) return
+      if (cur) toRetire.push(cur.id)
+      toInsert.push({ ...c, source: 'production', is_current: true })
+    })
+    for (const part of chunk(toRetire, 200)) {
+      const { error } = await supabase.from('equipment_components').update({ is_current: false }).in('id', part)
+      if (error) throw new Error(`구성품 이력 갱신 실패: ${error.message}`)
+    }
+    for (const part of chunk(toInsert, 500)) {
+      const { error } = await supabase.from('equipment_components').insert(part)
+      if (error) throw new Error(`구성품 저장 실패: ${error.message}`)
+    }
+
+    const duplicates = sns.filter(sn => existing.has(sn))
+    setUploadReport({ show: true, type: '생산이력조회', total: rows.length, inserted: rows.length - duplicates.length, duplicates })
+    if (parsed.warnings.length) alert(`확인 필요:\n${parsed.warnings.slice(0, 20).join('\n')}`)
+  }
+  // 생산이력 여러 파일 / 여러 시트 한 번에 업로드 (OMEGA 모델별 엑셀을 한꺼번에 선택)
+  const handleProductionUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    setUploading(true)
+    try {
+      const merged: ProductionParseResult = { equipments: [], components: [], dealers: [], warnings: [] }
+      const dealerMap = new Map<string, string>()
+      const summary: string[] = []
+      for (const file of files) {
+        const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+        for (const sheetName of wb.SheetNames) {
+          const matrix: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 })
+          let p: ProductionParseResult
+          try { p = parseProductionHistory(matrix) } catch (err: any) {
+            if (wb.SheetNames.length === 1) merged.warnings.push(`${file.name}: ${err.message}`)
+            continue
+          }
+          // 여러 파일에 같은 SN이 있으면 나중 파일 기준
+          const incoming = new Set(p.equipments.map(x => x.serial_number))
+          merged.equipments = merged.equipments.filter(x => !incoming.has(x.serial_number)).concat(p.equipments)
+          merged.components = merged.components.filter(x => !incoming.has(x.serial_number)).concat(p.components)
+          p.dealers.forEach(d => dealerMap.set(d.code, d.name))
+          merged.warnings.push(...p.warnings.map(w => `${file.name}: ${w}`))
+          const models = Array.from(new Set(p.equipments.map(x => x.model_name || '?'))).join(', ')
+          summary.push(`${file.name} → ${p.equipments.length}대 (${models})`)
+        }
+      }
+      merged.dealers = Array.from(dealerMap, ([code, name]) => ({ code, name }))
+      if (merged.equipments.length === 0) {
+        alert(`유효한 생산 데이터가 없습니다.\n${merged.warnings.join('\n')}`)
+        return
+      }
+      if (summary.length > 1) merged.warnings.unshift(`파일별 결과:\n${summary.join('\n')}`)
+      await saveProductionData(merged)
+    } catch (err: any) {
+      alert(`생산이력 업로드 실패: ${err.message}`)
+    } finally {
+      setUploading(false)
+      if (e.target) e.target.value = ''
+    }
+  }
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'omega' | 'sales') => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -619,77 +734,7 @@ const handleLogin = async (e: React.FormEvent) => {
         if (!matrix || matrix.length <= 1) { setUploading(false); return alert('파일 형식 오류.') }
 
         if (type === 'omega') {
-          // OMEGA '제품생산이력정보' → 머리글 기준 파싱 (app/lib/parsers/productionHistory.ts)
-          const parsed = parseProductionHistory(matrix)
-          if (parsed.equipments.length === 0) { setUploading(false); return alert('유효한 생산 데이터가 없습니다.') }
-
-          // (1) 대리점 등록 (새 코드만 추가, 기존 이름은 유지)
-          if (parsed.dealers.length > 0) {
-            const { error } = await supabase.from('dealers').upsert(parsed.dealers, { onConflict: 'code', ignoreDuplicates: true })
-            if (error) throw new Error(`대리점 저장 실패: ${error.message}`)
-          }
-
-          // (2) 기존 장비 상태 확인 (설치 완료 장비는 상태를 되돌리지 않음)
-          const sns = parsed.equipments.map(e => e.serial_number)
-          const existing = new Map<string, string>()
-          for (const part of chunk(sns, 200)) {
-            const { data, error } = await supabase.from('equipments').select('serial_number, status').in('serial_number', part)
-            if (error) throw new Error(`기존 장비 조회 실패: ${error.message}`)
-            data?.forEach((d: any) => existing.set(d.serial_number, d.status))
-          }
-
-          const compsBySn = new Map<string, typeof parsed.components>()
-          parsed.components.forEach(c => compsBySn.set(c.serial_number, [...(compsBySn.get(c.serial_number) || []), c]))
-
-          const rows = parsed.equipments.map(e => {
-            const comps = compsBySn.get(e.serial_number) || []
-            const main = comps.find(c => c.component === 'MAIN B/D')
-            const pneu = comps.find(c => c.component === 'PNEUMATIC B/D')
-            const { dealer_name, ...rest } = e
-            return {
-              ...rest,
-              model_name: getModelFromSN(e.serial_number, e.model_name || undefined),
-              status: existing.get(e.serial_number) === 'Installed' ? 'Installed' : e.status,
-              board_info: [main?.lot && `MAIN ${main.lot}`, pneu?.lot && `PNEU ${pneu.lot}`].filter(Boolean).join(' | ') || null,
-              sw_version: [main?.sw_version && `Main ${main.sw_version}`, pneu?.sw_version && `Pneu ${pneu.sw_version}`].filter(Boolean).join(' / ') || null,
-              source: 'omega',
-              omega_import_date: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            }
-          })
-          for (const part of chunk(rows, 500)) {
-            const { error } = await supabase.from('equipments').upsert(part, { onConflict: 'serial_number' })
-            if (error) throw new Error(`장비 저장 실패: ${error.message}`)
-          }
-
-          // (3) 구성품 이력: 값이 바뀐 구성품만 새 행 추가, 이전 행은 is_current = false (이력 보존)
-          const current = new Map<string, any>()
-          for (const part of chunk(sns, 200)) {
-            const { data, error } = await supabase.from('equipment_components').select('*').eq('is_current', true).in('serial_number', part)
-            if (error) throw new Error(`구성품 조회 실패: ${error.message}`)
-            data?.forEach((c: any) => current.set(`${c.serial_number}|${c.component}`, c))
-          }
-          const same = (a: any, b: any) => ['lot', 'hw_version', 'sw_version', 'dc_hw_version', 'dc_sw_version'].every(k => (a[k] ?? null) === (b[k] ?? null))
-          const toRetire: number[] = []
-          const toInsert: any[] = []
-          parsed.components.forEach(c => {
-            const cur = current.get(`${c.serial_number}|${c.component}`)
-            if (cur && same(cur, c)) return
-            if (cur) toRetire.push(cur.id)
-            toInsert.push({ ...c, source: 'production', is_current: true })
-          })
-          for (const part of chunk(toRetire, 200)) {
-            const { error } = await supabase.from('equipment_components').update({ is_current: false }).in('id', part)
-            if (error) throw new Error(`구성품 이력 갱신 실패: ${error.message}`)
-          }
-          for (const part of chunk(toInsert, 500)) {
-            const { error } = await supabase.from('equipment_components').insert(part)
-            if (error) throw new Error(`구성품 저장 실패: ${error.message}`)
-          }
-
-          const duplicates = sns.filter(sn => existing.has(sn))
-          setUploadReport({ show: true, type: '생산이력조회', total: rows.length, inserted: rows.length - duplicates.length, duplicates })
-          if (parsed.warnings.length) alert(`확인 필요:\n${parsed.warnings.slice(0, 20).join('\n')}`)
+          await saveProductionData(parseProductionHistory(matrix))
 
         } else {
           const hr = matrix.findIndex(r => r && (r.includes('LOT번호') || r.includes('매출일')))
@@ -1352,9 +1397,9 @@ const handleLogin = async (e: React.FormEvent) => {
                   <h3 className="text-xl font-black text-slate-800">생산/제조 마스터 DB</h3>
                   <span className="text-sm bg-blue-50 text-blue-700 px-4 py-1.5 rounded-lg font-bold border border-blue-100">총 {equipments.length}대</span>
                 </div>
-                <input type="file" accept=".xlsx, .xls, .csv" ref={prodFileInputRef} onChange={(e) => handleFileUpload(e, 'omega')} className="hidden" />
+                <input type="file" multiple accept=".xlsx, .xls, .csv" ref={prodFileInputRef} onChange={handleProductionUpload} className="hidden" />
                 <button onClick={() => prodFileInputRef.current?.click()} disabled={uploading} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg transition shadow-sm flex items-center gap-2">
-                  {uploading ? '저장 중...' : '🏭 생산이력 업로드'}
+                  {uploading ? '저장 중...' : '🏭 생산이력 업로드 (여러 파일 가능)'}
                 </button>
               </div>
 
